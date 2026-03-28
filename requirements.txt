@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+sqlalchemy
+dowhy
+torch
+flwr[simulation]
+faster-whisper
+pyttsx3
+sounddevice
+scipy
+requests
+opencv-python
+pandas
+numpy
+networkx
+ultralytics
+Pillow

@@ -1,0 +1,27 @@
+{
+{
+  "regional_priors": [
+    {
+      "location": "Chennai",
+      "humidity_avg": 82,
+      "temp_avg": 31,
+      "common_waste_items": ["Tomato", "Milk"],
+      "pesticide_risk_level": "High"
+    },
+    {
+      "location": "Madurai",
+      "humidity_avg": 65,
+      "temp_avg": 34,
+      "common_waste_items": ["Greens", "Curd"],
+      "pesticide_risk_level": "Medium"
+    },
+    {
+      "location": "Coimbatore",
+      "humidity_avg": 70,
+      "temp_avg": 28,
+      "common_waste_items": ["Paneer", "Carrot"],
+      "pesticide_risk_level": "Low"
+    }
+  ],
+  "global_model_version": "v1.4.2-causal-fresh"
+}

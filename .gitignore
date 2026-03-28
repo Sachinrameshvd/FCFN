@@ -1,0 +1,29 @@
+# Python
+venv/
+env/
+backend/venv/
+backend/__pycache__/
+backend/vision/training/dataset/
+backend/vision/training/__pycache__/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+
+# ML Models & Logs (Large Binaries)
+*.pt
+*.pth
+*.h5
+*.pkl
+runs/
+
+# Database
+*.db
+
+# Environment files
+.env
+
+# OS
+.DS_Store

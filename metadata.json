@@ -1,0 +1,5 @@
+{
+  "name": "FedCausalFresh Net (FCFN)",
+  "description": "A privacy-preserving smart fridge AI for Tamil Nadu, featuring YOLO-based detection, causal spoilage prediction, and federated learning.",
+  "requestFramePermissions": ["camera", "microphone"]
+}

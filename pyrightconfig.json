@@ -1,0 +1,15 @@
+{
+    "pythonVersion": "3.12",
+    "pythonPlatform": "Darwin",
+    "venvPath": ".",
+    "venv": "env",
+    "typeCheckingMode": "basic",
+    "reportMissingImports": "none",
+    "reportMissingModuleSource": "none",
+    "reportMissingTypeStubs": "none",
+    "executionEnvironments": [
+        {
+            "root": "."
+        }
+    ]
+}
