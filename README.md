@@ -61,5 +61,40 @@ The Community Hub proves that "Privacy-First" doesn't mean isolated.
 
 ---
 
-> [!IMPORTANT]
-> **Next Steps**: After uploading these 5 images to the `/assets/images` directory, please send the remaining 5 pictures to complete the "Causal Intelligence" and "Eco-Impact" sections of the documentation.
+### 6. Causal Spoilage Prediction
+![Causal Spoilage](assets/images/causal_spoilage.png)
+*Filename: `causal_spoilage.png`*
+
+We employ Causal Inference to model "Counterfactual Analysis & Shelf-Life Extension".
+- **Zone Simulation**: Simulates the effect of moving an item (e.g., an Onion) from its current position to a target zone.
+- **Causal Logic**: Isolates the causal impact of fridge placement while confounding for external factors like coastal humidity and ethylene sensitivity.
+- **AI Inference Report**: Generates real-time predictions on shelf-life extension.
+
+### 7. Sustainability Impact Tracker
+![Sustainability Impact](assets/images/sustainability_impact.png)
+*Filename: `sustainability_impact.png`*
+
+FCFN acts as your personal carbon-offset monitor.
+- **Live Carbon Dashboard**: Tracks exact metrics like "kg CO2 Prevented" and "Items Rescued".
+- **Gamified Leaderboards**: Compares your household's eco-impact against neighborhood nodes (e.g., "Top 5% in T. Nagar").
+- **Live Trend Graph**: Visualizes weekly sustainability improvements and carbon saved.
+
+### 8. Privacy-First Federated Network
+![Federated Network](assets/images/federated_network.png)
+*Filename: `federated_network.png`*
+
+Our core AI architecture ensures your fridge images never leave your house.
+- **Decentralized Spoilage Intelligence**: Tracks the total number of global model weight synchronizations across the active nodes.
+- **Network Accuracy Improvement**: Visualizes how the collective spoilage prediction model's accuracy increases over time through collaborative learning, with zero data privacy compromise.
+
+### 9. Pesticide Education Lab
+![Pesticide Education](assets/images/pesticide_education.png)
+*Filename: `pesticide_education.png`*
+
+- **Science-based Food Safety**: Educating users on the impact of pesticides tailored specifically to the Tamil Nadu agricultural context.
+- **Automated Content Generation**: Generates research-backed educational steps on how to properly wash, store, and consume local produce safely to mitigate chemical risks.
+
+---
+
+> [!TIP]
+> **Setup & Execution**: To run the project locally, please refer to the `EXECUTION_GUIDE.md` which will walk you through starting the backend nodes, frontend, and federation server.
