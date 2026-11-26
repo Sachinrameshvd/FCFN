@@ -922,19 +922,9 @@ export class FederatedMesh {
     fGroup.add(fridgeOLED);
 
     // Cold-White Gourmet Interior Showcase Light (Illuminates from inside the fridge)
-    const interiorLight = new THREE.PointLight(0xe0f2fe, 2.2, 4.5);
+    const interiorLight = new THREE.PointLight(0xe0f2fe, 1.4, 3.2);
     interiorLight.position.set(0, 0.25, 0.15);
     fGroup.add(interiorLight);
-
-    // Glowing interior shelves (illuminated Sub-Zero cryo-glass)
-    [-0.3, 0.15, 0.6].forEach(shelfY => {
-      const shelf = new THREE.Mesh(
-        new THREE.BoxGeometry(fWidth * 0.85, 0.02, fDepth * 0.7),
-        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.85 })
-      );
-      shelf.position.set(0, shelfY, 0.05);
-      fGroup.add(shelf);
-    });
 
     // Top-Mounted Edge-AI Neural Compute Processor
     const brainBox = new THREE.Mesh(
