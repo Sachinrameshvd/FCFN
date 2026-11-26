@@ -2,15 +2,18 @@ import * as THREE from 'three';
 import * as TWEEN from '@tweenjs/tween.js';
 import { SoundEngine } from '../audio/SoundEngine';
 
-export type AvatarState = 'hidden' | 'walking' | 'reaching' | 'lifting' | 'eating' | 'savoring' | 'idle';
+export type AvatarState = 'hidden' | 'walking' | 'reaching' | 'lifting' | 'chewing' | 'savoring' | 'idle';
 
 /**
  * AnimatedAvatar: Fully Articulated 3D Humanoid Character
- * Biomechanical Walk Cycle:
- * - Walks into the kitchen scene from the left.
- * - Reaches into the Sub-Zero fridge, picks up the Honeycrisp apple.
- * - Lifts the apple to mouth and takes a crisp bite with audio and juice particles.
- * - Savor posture with proud presentation of the bitten fruit.
+ * Biomechanical Walk Cycle & Apple Eating Sequence:
+ * 1. Walks into the kitchen scene from the front-left aisle.
+ * 2. Steps up to the Sub-Zero fridge, reaches right arm into the middle shelf.
+ * 3. Grasps the Honeycrisp apple (shelf apple disappears, hand apple appears).
+ * 4. Turns toward the viewer / camera and lifts the crisp apple to mouth.
+ * 5. Takes a crisp bite with procedural audio crunch, glistening juice particle spray, and screen recoil.
+ * 6. Chews with realistic jaw/head bobs, lowers arm to proudly display the bitten fruit, and savors.
+ * 7. Responds to "Take Another Bite 🍎" button with instant repeat bite animation.
  */
 export class AnimatedAvatar {
   public group: THREE.Group;
@@ -47,21 +50,21 @@ export class AnimatedAvatar {
   // State Management
   public state: AvatarState = 'hidden';
   private walkTime: number = 0;
-  private walkProgress: number = 0;
-  private walkDuration: number = 3.4; // seconds to walk in
+  private chewTime: number = 0;
+  private idleTime: number = 0;
+  private walkObj = { progress: 0 };
 
-  // Catmull-Rom natural walking path through the open kitchen aisle (z >= 4.4 to 10.8)
-  // Perfectly clears the open left French door (which extends up to z = 7.4 at x = -6.4)
+  // Smooth Catmull-Rom natural walking path from kitchen aisle directly to fridge middle shelf
+  // Starts in visible front-left kitchen aisle, strides forward past open door, curves to middle shelf
   private walkCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-9.6, -6.8, 10.8), // Start off-screen left on kitchen floor
-    new THREE.Vector3(-5.2, -6.8, 9.6),  // Walking down front aisle, 3+ units clear of door swing
-    new THREE.Vector3(-1.8, -6.8, 7.6),  // Curving into wide open doorway aperture
-    new THREE.Vector3(0.1, -6.8, 4.4)    // Stopping centered in front of middle shelf
+    new THREE.Vector3(-6.2, -6.8, 9.8),  // Starts visible in kitchen aisle
+    new THREE.Vector3(-3.8, -6.8, 7.8),  // Striding forward
+    new THREE.Vector3(-1.8, -6.8, 5.8),  // Curving into doorway
+    new THREE.Vector3(-0.6, -6.8, 4.4)   // Standing at middle shelf
   ]);
   private activeTweens: TWEEN.Tween<any>[] = [];
-  private idleTime: number = 0;
 
-  // Callbacks to hide/restore original shelf apple in fridge
+  // Callbacks
   public onShelfAppleHide?: () => void;
   public onShelfAppleRestore?: () => void;
   public onBiteImpact?: () => void;
@@ -100,15 +103,14 @@ export class AnimatedAvatar {
   // 1. CHARACTER MESH & ARTICULATED RIG
   // ---------------------------------------------------------------------------
   private buildCharacterMesh() {
-    // Materials
     const skinMat = new THREE.MeshStandardMaterial({
-      color: 0xdfa06e, // Natural warm skin tone
+      color: 0xdfa06e, // Warm natural skin tone
       roughness: 0.62,
       metalness: 0.04
     });
 
     const shirtMat = new THREE.MeshStandardMaterial({
-      color: 0xede8de, // Oatmeal luxury linen shirt
+      color: 0xede8de, // Luxury oatmeal linen shirt
       roughness: 0.85,
       metalness: 0.02
     });
@@ -179,7 +181,6 @@ export class AnimatedAvatar {
     torso.position.set(0, 6.7, 0);
     this.bodyGroup.add(torso);
 
-    // Shirt Collar
     const collar = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.1, 8, 16), shirtMat);
     collar.rotation.x = Math.PI / 2;
     collar.position.set(0, 8.1, 0.05);
@@ -197,7 +198,7 @@ export class AnimatedAvatar {
     const head = new THREE.Mesh(headGeo, skinMat);
     this.headGroup.add(head);
 
-    // Groomed Hair
+    // Hair
     const hairGeo = new THREE.SphereGeometry(0.72, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.65);
     const hair = new THREE.Mesh(hairGeo, hairMat);
     hair.position.set(0, 0.08, -0.05);
@@ -213,7 +214,32 @@ export class AnimatedAvatar {
     nose.position.set(0, -0.04, 0.7);
     this.headGroup.add(nose);
 
-    // D. LEFT ARM (Natural Walk Counter-Swing)
+    // Eyes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1f2937 });
+    const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyeMat);
+    leftEye.position.set(-0.2, 0.08, 0.63);
+    const rightEye = leftEye.clone();
+    rightEye.position.set(0.2, 0.08, 0.63);
+    this.headGroup.add(leftEye, rightEye);
+
+    // Eyebrows
+    const browMat = new THREE.MeshBasicMaterial({ color: 0x24140d });
+    const leftBrow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.05), browMat);
+    leftBrow.position.set(-0.2, 0.18, 0.64);
+    leftBrow.rotation.z = -0.05;
+    const rightBrow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.05), browMat);
+    rightBrow.position.set(0.2, 0.18, 0.64);
+    rightBrow.rotation.z = 0.05;
+    this.headGroup.add(leftBrow, rightBrow);
+
+    // Warm Smile Line
+    const smileMat = new THREE.MeshBasicMaterial({ color: 0x9f5844 });
+    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.022, 6, 12, Math.PI * 0.8), smileMat);
+    smile.rotation.z = Math.PI * 1.1;
+    smile.position.set(0, -0.22, 0.64);
+    this.headGroup.add(smile);
+
+    // D. LEFT ARM
     this.leftShoulder.position.set(-1.18, 7.8, 0);
     this.bodyGroup.add(this.leftShoulder);
 
@@ -221,7 +247,6 @@ export class AnimatedAvatar {
     leftUpperArm.position.set(0, -0.8, 0);
     this.leftShoulder.add(leftUpperArm);
 
-    // Sleeve Cuff
     const leftCuff = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 8, 14), shirtMat);
     leftCuff.rotation.x = Math.PI / 2;
     leftCuff.position.set(0, -1.6, 0);
@@ -265,7 +290,6 @@ export class AnimatedAvatar {
     palm.position.set(0, -0.16, 0);
     this.rightWrist.add(palm);
 
-    // Fingers in grasping posture
     for (let f = -0.09; f <= 0.09; f += 0.06) {
       const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.26, 8), skinMat);
       finger.position.set(f, -0.32, 0.06);
@@ -273,7 +297,6 @@ export class AnimatedAvatar {
       this.rightWrist.add(finger);
     }
 
-    // Apple Container attached to right hand
     this.handAppleGroup.position.set(0, -0.28, 0.22);
     this.rightWrist.add(this.handAppleGroup);
   }
@@ -283,7 +306,7 @@ export class AnimatedAvatar {
   // ---------------------------------------------------------------------------
   private buildAppleMeshes() {
     const appleSkinMat = new THREE.MeshStandardMaterial({
-      color: 0xef4444,
+      color: 0xef4444, // Glossy Honeycrisp Crimson
       roughness: 0.16,
       metalness: 0.08
     });
@@ -311,18 +334,18 @@ export class AnimatedAvatar {
     this.bittenAppleMesh.add(bittenBody);
 
     const pulpMat = new THREE.MeshStandardMaterial({
-      color: 0xfefce8,
-      roughness: 0.32
+      color: 0xfef9e7, // Crisp pale cream-white apple flesh
+      roughness: 0.38
     });
-    const biteNotch = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 14), pulpMat);
-    biteNotch.position.set(0.18, 0.12, 0.22);
-    biteNotch.scale.set(1.1, 0.9, 0.85);
-    this.bittenAppleMesh.add(biteNotch);
+    const biteNotch1 = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 14), pulpMat);
+    biteNotch1.position.set(0.18, 0.12, 0.22);
+    biteNotch1.scale.set(1.15, 0.95, 0.9);
+    this.bittenAppleMesh.add(biteNotch1);
 
     const seedMat = new THREE.MeshBasicMaterial({ color: 0x241208 });
-    const seed = new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 6), seedMat);
-    seed.scale.set(0.6, 1.2, 0.5);
-    seed.position.set(0.16, 0.1, 0.24);
+    const seed = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 6), seedMat);
+    seed.scale.set(0.6, 1.3, 0.5);
+    seed.position.set(0.15, 0.09, 0.25);
     this.bittenAppleMesh.add(seed);
 
     const stem2 = stem.clone();
@@ -336,7 +359,7 @@ export class AnimatedAvatar {
   // 3. JUICE PARTICLES
   // ---------------------------------------------------------------------------
   private buildJuiceDroplets() {
-    const particleCount = 28;
+    const particleCount = 36;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
 
@@ -350,8 +373,8 @@ export class AnimatedAvatar {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
     const material = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 0.06,
+      color: 0xfffbe8,
+      size: 0.08,
       transparent: true,
       opacity: 0.0,
       depthWrite: false
@@ -362,7 +385,7 @@ export class AnimatedAvatar {
   }
 
   // ===========================================================================
-  // 4. THE FULL CHOREOGRAPHY: REACH ➔ GRASP ➔ BITE ➔ SAVOR
+  // 4. THE FULL CHOREOGRAPHY: WALK-IN ➔ REACH ➔ GRASP ➔ TURN & BITE ➔ SAVOR
   // ===========================================================================
   public startFullSequence() {
     this.stopActiveTweens();
@@ -373,11 +396,13 @@ export class AnimatedAvatar {
     this.bittenAppleMesh.visible = false;
     if (this.onShelfAppleRestore) this.onShelfAppleRestore();
 
-    // Position Avatar directly centered in front of the middle shelf
-    this.rootGroup.position.set(0.1, -6.8, 4.4);
-    this.rootGroup.rotation.set(0, Math.PI * 0.98, 0);
+    // 1. Position Avatar at start of walk path (visible kitchen aisle)
+    const startPoint = this.walkCurve.getPoint(0);
+    this.rootGroup.position.copy(startPoint);
+    const startTangent = this.walkCurve.getTangent(0);
+    this.rootGroup.rotation.set(0, Math.atan2(startTangent.x, startTangent.z), 0);
 
-    // Reset Joint Angles to neutral standing posture
+    // Reset Joints
     this.leftHip.rotation.set(0, 0, 0);
     this.leftKnee.rotation.set(0, 0, 0);
     this.rightHip.rotation.set(0, 0, 0);
@@ -389,29 +414,63 @@ export class AnimatedAvatar {
     this.bodyGroup.position.set(0, 0, 0);
     this.bodyGroup.rotation.set(0, 0, 0);
 
-    // Smoothly reach right arm into shelf towards the Honeycrisp apple
-    this.executeReachAndGrasp();
-  }
+    this.state = 'walking';
+    this.walkTime = 0;
+    this.walkObj.progress = 0;
 
-  private settleIntoStanding() {
-    this.executeReachAndGrasp();
+    // 2. Animate Walking In Along Catmull-Rom Path (~1.8 seconds)
+    const walkTween = new TWEEN.Tween(this.walkObj)
+      .to({ progress: 1.0 }, 1800)
+      .easing(TWEEN.Easing.Quadratic.Out)
+      .onUpdate(() => {
+        const pt = this.walkCurve.getPoint(this.walkObj.progress);
+        this.rootGroup.position.copy(pt);
+        const tangent = this.walkCurve.getTangent(this.walkObj.progress);
+        this.rootGroup.rotation.y = Math.atan2(tangent.x, tangent.z);
+      })
+      .onComplete(() => {
+        // Stop walking, settle into standing posture
+        this.state = 'reaching';
+        this.leftHip.rotation.set(0, 0, 0);
+        this.leftKnee.rotation.set(0, 0, 0);
+        this.rightHip.rotation.set(0, 0, 0);
+        this.rightKnee.rotation.set(0, 0, 0);
+        this.leftShoulder.rotation.set(0, 0, 0);
+        this.bodyGroup.position.set(0, 0, 0);
+        this.bodyGroup.rotation.set(0, 0, 0);
+
+        // Face squarely toward the open fridge middle shelf
+        const turnFridge = new TWEEN.Tween(this.rootGroup.rotation)
+          .to({ y: Math.PI * 0.88 }, 450)
+          .easing(TWEEN.Easing.Cubic.Out);
+
+        turnFridge.start();
+        this.activeTweens.push(turnFridge);
+
+        this.executeReachAndGrasp();
+      });
+
+    walkTween.start();
+    this.activeTweens.push(walkTween);
   }
 
   private executeReachAndGrasp() {
-    // 2. REACH RIGHT ARM INTO SHELF DIRECTLY TOWARDS THE HONEYCRISP APPLE
+    this.state = 'reaching';
+
+    // Reach right arm into middle shelf directly towards the Honeycrisp apple
     const reachShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.35, y: -0.32, z: 0.15 }, 950)
+      .to({ x: -1.35, y: -0.32, z: 0.15 }, 850)
       .easing(TWEEN.Easing.Cubic.Out);
 
     const reachElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -0.35, y: 0.1, z: 0 }, 950)
+      .to({ x: -0.35, y: 0.1, z: 0 }, 850)
       .easing(TWEEN.Easing.Cubic.Out);
 
     const reachHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.22, y: -0.15, z: 0 }, 950)
+      .to({ x: 0.22, y: -0.15, z: 0 }, 850)
       .easing(TWEEN.Easing.Cubic.Out);
 
-    // 3. GRASP APPLE (at 950ms)
+    // Grasp apple
     reachShoulder.onComplete(() => {
       if (this.onShelfAppleHide) this.onShelfAppleHide();
       this.wholeAppleMesh.visible = true;
@@ -427,37 +486,110 @@ export class AnimatedAvatar {
   private executeLiftAndBite() {
     this.state = 'lifting';
 
-    // 4. LIFT APPLE UP TO MOUTH
+    // Cinematic Move: Turn upper body toward camera so user clearly sees the bite!
+    const turnToCamera = new TWEEN.Tween(this.rootGroup.rotation)
+      .to({ y: -0.42 }, 950)
+      .easing(TWEEN.Easing.Cubic.InOut);
+
+    // Lift apple up to mouth
     const liftShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.95, y: -0.58, z: -0.42 }, 1100)
+      .to({ x: -1.95, y: -0.55, z: -0.40 }, 950)
       .easing(TWEEN.Easing.Cubic.InOut);
 
     const liftElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -2.15, y: 0.32, z: 0.18 }, 1100)
+      .to({ x: -2.15, y: 0.28, z: 0.16 }, 950)
       .easing(TWEEN.Easing.Cubic.InOut);
 
     const tiltHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.32, y: -0.08, z: -0.04 }, 1100)
+      .to({ x: 0.26, y: -0.06, z: -0.04 }, 950)
       .easing(TWEEN.Easing.Cubic.InOut);
 
-    // 5. TAKE THE CRISP BITE!
+    // Crisp Bite Climax!
     liftShoulder.onComplete(() => {
-      this.state = 'eating';
+      this.state = 'chewing';
+      this.chewTime = 0;
 
-      // Switch to Bitten Apple!
+      // Switch to Bitten Apple showing juicy white crisp interior
       this.wholeAppleMesh.visible = false;
       this.bittenAppleMesh.visible = true;
 
-      // Play Procedural Apple Crunch Sound!
+      // Audio Crunch + Juice Droplets + Camera Recoil
       this.soundEngine.playAppleCrunchSound();
-
-      // Trigger Fresh Glistening Juice Droplets
       this.triggerJuiceBurst();
-
-      // Camera Tactile Recoil Impulse
       if (this.onBiteImpact) this.onBiteImpact();
 
-      // Brief pause to savor bite, then transition to presentation pose
+      // Chew for 800ms then transition to presentation
+      setTimeout(() => {
+        this.executeSavorPresentation();
+      }, 800);
+    });
+
+    turnToCamera.start();
+    liftShoulder.start();
+    liftElbow.start();
+    tiltHead.start();
+    this.activeTweens.push(turnToCamera, liftShoulder, liftElbow, tiltHead);
+  }
+
+  private executeSavorPresentation() {
+    this.state = 'savoring';
+
+    // Lower arm to chest height, proudly presenting the bitten Honeycrisp apple
+    const lowerShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
+      .to({ x: -0.88, y: -0.25, z: 0.32 }, 800)
+      .easing(TWEEN.Easing.Cubic.Out);
+
+    const lowerElbow = new TWEEN.Tween(this.rightElbow.rotation)
+      .to({ x: -1.22, y: 0.22, z: -0.16 }, 800)
+      .easing(TWEEN.Easing.Cubic.Out);
+
+    const headSavor = new TWEEN.Tween(this.headGroup.rotation)
+      .to({ x: -0.06, y: 0.06, z: 0 }, 800)
+      .easing(TWEEN.Easing.Cubic.Out)
+      .onComplete(() => {
+        this.state = 'idle';
+      });
+
+    lowerShoulder.start();
+    lowerElbow.start();
+    headSavor.start();
+    this.activeTweens.push(lowerShoulder, lowerElbow, headSavor);
+  }
+
+  public takeAnotherBite() {
+    if (this.state === 'hidden' || !this.group.visible) {
+      this.show();
+      return;
+    }
+
+    this.stopActiveTweens();
+    this.wholeAppleMesh.visible = false;
+    this.bittenAppleMesh.visible = true;
+    this.state = 'lifting';
+
+    // Ensure facing camera
+    this.rootGroup.rotation.y = -0.42;
+
+    // Lift back to mouth in 650ms
+    const liftShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
+      .to({ x: -1.95, y: -0.55, z: -0.40 }, 650)
+      .easing(TWEEN.Easing.Cubic.InOut);
+
+    const liftElbow = new TWEEN.Tween(this.rightElbow.rotation)
+      .to({ x: -2.15, y: 0.28, z: 0.16 }, 650)
+      .easing(TWEEN.Easing.Cubic.InOut);
+
+    const tiltHead = new TWEEN.Tween(this.headGroup.rotation)
+      .to({ x: 0.26, y: -0.06, z: -0.04 }, 650)
+      .easing(TWEEN.Easing.Cubic.InOut);
+
+    liftShoulder.onComplete(() => {
+      this.state = 'chewing';
+      this.chewTime = 0;
+      this.soundEngine.playAppleCrunchSound();
+      this.triggerJuiceBurst();
+      if (this.onBiteImpact) this.onBiteImpact();
+
       setTimeout(() => {
         this.executeSavorPresentation();
       }, 700);
@@ -469,81 +601,9 @@ export class AnimatedAvatar {
     this.activeTweens.push(liftShoulder, liftElbow, tiltHead);
   }
 
-  private executeSavorPresentation() {
-    this.state = 'savoring';
-
-    // 6. TURN BODY TOWARDS CAMERA & PROUDLY DISPLAY BITTEN FRUIT
-    const turnCamera = new TWEEN.Tween(this.rootGroup.rotation)
-      .to({ y: -0.48 }, 1000)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const lowerShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -0.92, y: -0.28, z: 0.35 }, 1000)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const lowerElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -1.25, y: 0.22, z: -0.18 }, 1000)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const headLift = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: -0.08, y: 0.05, z: 0 }, 1000)
-      .easing(TWEEN.Easing.Cubic.Out)
-      .onComplete(() => {
-        this.state = 'idle';
-      });
-
-    turnCamera.start();
-    lowerShoulder.start();
-    lowerElbow.start();
-    headLift.start();
-    this.activeTweens.push(turnCamera, lowerShoulder, lowerElbow, headLift);
-  }
-
-  public takeAnotherBite() {
-    this.rootGroup.position.set(0.1, -6.8, 4.4);
-
-    if (this.state === 'hidden' || !this.group.visible) {
-      this.show();
-      return;
-    }
-
-    this.stopActiveTweens();
-    this.wholeAppleMesh.visible = false;
-    this.bittenAppleMesh.visible = true;
-    this.state = 'lifting';
-
-    const liftShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.95, y: -0.58, z: -0.42 }, 750)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    const liftElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -2.15, y: 0.32, z: 0.18 }, 750)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    const tiltHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.32, y: -0.08, z: -0.04 }, 750)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    liftShoulder.onComplete(() => {
-      this.state = 'eating';
-      this.soundEngine.playAppleCrunchSound();
-      this.triggerJuiceBurst();
-      if (this.onBiteImpact) this.onBiteImpact();
-
-      setTimeout(() => {
-        this.executeSavorPresentation();
-      }, 650);
-    });
-
-    liftShoulder.start();
-    liftElbow.start();
-    tiltHead.start();
-    this.activeTweens.push(liftShoulder, liftElbow, tiltHead);
-  }
-
   private triggerJuiceBurst() {
     this.particlesActive = true;
-    (this.juiceParticles.material as THREE.PointsMaterial).opacity = 0.9;
+    (this.juiceParticles.material as THREE.PointsMaterial).opacity = 1.0;
 
     const positions = this.juiceParticles.geometry.attributes.position.array as Float32Array;
     for (let i = 0; i < this.particleVelocities.length; i++) {
@@ -552,9 +612,9 @@ export class AnimatedAvatar {
       positions[i * 3 + 2] = 0.22;
 
       this.particleVelocities[i].set(
-        (Math.random() - 0.4) * 0.08,
-        (Math.random() * 0.06 + 0.02),
-        (Math.random() * 0.08 + 0.02)
+        (Math.random() - 0.4) * 0.09,
+        (Math.random() * 0.08 + 0.03),
+        (Math.random() * 0.09 + 0.03)
       );
     }
     this.juiceParticles.geometry.attributes.position.needsUpdate = true;
@@ -589,40 +649,44 @@ export class AnimatedAvatar {
 
     // A. BIOMECHANICAL WALK CYCLE
     if (this.state === 'walking') {
-      const walkSpeed = 6.2; // stride frequency
+      const walkSpeed = 7.5; // Stride frequency
       this.walkTime += delta * walkSpeed;
 
-      // Leg Swings (Opposition striding)
       const legStride = Math.sin(this.walkTime);
-      this.leftHip.rotation.x = legStride * 0.52;
-      this.rightHip.rotation.x = -legStride * 0.52;
+      this.leftHip.rotation.x = legStride * 0.55;
+      this.rightHip.rotation.x = -legStride * 0.55;
 
-      // Knee Bend on Back-to-Forward Swing
-      this.leftKnee.rotation.x = Math.max(0, -legStride) * 0.65;
-      this.rightKnee.rotation.x = Math.max(0, legStride) * 0.65;
+      this.leftKnee.rotation.x = Math.max(0, -legStride) * 0.7;
+      this.rightKnee.rotation.x = Math.max(0, legStride) * 0.7;
 
-      // Arm Counter-Swing (Opposite to legs)
+      // Arm counter-swing
       this.leftShoulder.rotation.x = -legStride * 0.45;
       this.rightShoulder.rotation.x = legStride * 0.45;
       this.rightElbow.rotation.x = -0.3 + Math.abs(legStride) * 0.25;
 
-      // Pelvic Vertical Bounce (Double-frequency bounce on each step)
-      const bounce = Math.abs(Math.sin(this.walkTime)) * 0.14;
-      this.bodyGroup.position.y = bounce;
+      // Pelvic vertical bounce
+      this.bodyGroup.position.y = Math.abs(Math.sin(this.walkTime)) * 0.12;
 
-      // Subtle Lateral Torso Sway
+      // Subtle lateral torso sway
       this.bodyGroup.rotation.z = Math.sin(this.walkTime) * 0.035;
     }
 
-    // B. NATURAL IDLE BREATHING & POSTURE
+    // B. CHEWING ANIMATION (Jaw/Head Bobs)
+    if (this.state === 'chewing') {
+      this.chewTime += delta;
+      this.headGroup.rotation.x = 0.22 + Math.sin(this.chewTime * 14) * 0.05;
+      this.bodyGroup.position.y = Math.sin(this.chewTime * 14) * 0.015;
+    }
+
+    // C. NATURAL IDLE BREATHING & POSTURE
     if (this.state === 'idle' || this.state === 'savoring') {
       const breath = Math.sin(this.idleTime * 1.5) * 0.02;
       this.bodyGroup.position.y = breath;
       this.headGroup.position.y = 9.2 + breath * 0.4;
-      this.headGroup.rotation.y = 0.12 + Math.sin(this.idleTime * 0.7) * 0.03;
+      this.headGroup.rotation.y = 0.06 + Math.sin(this.idleTime * 0.8) * 0.03;
     }
 
-    // C. JUICE DROPLET PARTICLES
+    // D. JUICE DROPLET PARTICLES
     if (this.particlesActive) {
       const positions = this.juiceParticles.geometry.attributes.position.array as Float32Array;
       const mat = this.juiceParticles.material as THREE.PointsMaterial;
@@ -635,11 +699,10 @@ export class AnimatedAvatar {
       }
       this.juiceParticles.geometry.attributes.position.needsUpdate = true;
 
-      mat.opacity = Math.max(0, mat.opacity - delta * 1.4);
+      mat.opacity = Math.max(0, mat.opacity - delta * 1.3);
       if (mat.opacity <= 0.01) {
         this.particlesActive = false;
       }
     }
   }
 }
-

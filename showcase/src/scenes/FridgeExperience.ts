@@ -371,7 +371,9 @@ export class FridgeExperience {
 
       // Show & Trigger Avatar Walk-in, Reach & Eat on Chapter 07
       if (chapter.sceneFocus === 'avatar_payoff') {
-        this.animatedAvatar.show();
+        if (!this.animatedAvatar.group.visible || this.animatedAvatar.state === 'hidden') {
+          this.animatedAvatar.show();
+        }
       } else {
         this.animatedAvatar.hide();
       }
@@ -570,10 +572,6 @@ export class FridgeExperience {
   };
 
   public triggerAvatarEat() {
-    if (this.animatedAvatar.state === 'idle' || this.animatedAvatar.state === 'savoring') {
-      this.animatedAvatar.takeAnotherBite();
-    } else {
-      this.animatedAvatar.show();
-    }
+    this.animatedAvatar.takeAnotherBite();
   }
 }
