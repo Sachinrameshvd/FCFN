@@ -5,6 +5,7 @@
     "module": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
+    "types": ["vite/client"],
     "strict": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -14,4 +15,3 @@
   },
   "include": ["src"]
 }
-
