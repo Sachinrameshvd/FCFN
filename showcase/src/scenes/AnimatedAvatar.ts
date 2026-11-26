@@ -92,9 +92,9 @@ export class AnimatedAvatar {
   private readonly REACH_ELBOW = { x: -0.35, y: 0.10, z: 0.00 };
   private readonly REACH_HEAD = { x: 0.22, y: -0.12, z: 0.00 };
 
-  private readonly MOUTH_SHOULDER = { x: -1.95, y: -0.55, z: -0.40 };
-  private readonly MOUTH_ELBOW = { x: -2.15, y: 0.28, z: 0.16 };
-  private readonly MOUTH_HEAD = { x: 0.26, y: -0.06, z: -0.04 };
+  private readonly MOUTH_SHOULDER = { x: -1.75, y: -0.75, z: -0.20 };
+  private readonly MOUTH_ELBOW = { x: -1.90, y: 0.00, z: 0.00 };
+  private readonly MOUTH_HEAD = { x: 0.18, y: -0.05, z: 0.00 };
 
   private readonly SAVOR_SHOULDER = { x: -0.88, y: -0.25, z: 0.32 };
   private readonly SAVOR_ELBOW = { x: -1.22, y: 0.22, z: -0.16 };
