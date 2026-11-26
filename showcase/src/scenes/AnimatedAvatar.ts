@@ -362,7 +362,7 @@ export class AnimatedAvatar {
   }
 
   // ===========================================================================
-  // 4. THE FULL CHOREOGRAPHY: WALK IN ➔ REACH ➔ GRASP ➔ BITE ➔ SAVOR
+  // 4. THE FULL CHOREOGRAPHY: REACH ➔ GRASP ➔ BITE ➔ SAVOR
   // ===========================================================================
   public startFullSequence() {
     this.stopActiveTweens();
@@ -373,13 +373,11 @@ export class AnimatedAvatar {
     this.bittenAppleMesh.visible = false;
     if (this.onShelfAppleRestore) this.onShelfAppleRestore();
 
-    // Position Avatar at the beginning of the open kitchen corridor
-    const startPt = this.walkCurve.getPoint(0);
-    this.rootGroup.position.copy(startPt);
-    const startTangent = this.walkCurve.getTangent(0);
-    this.rootGroup.rotation.y = Math.atan2(startTangent.x, startTangent.z);
+    // Position Avatar directly centered in front of the middle shelf
+    this.rootGroup.position.set(0.1, -6.8, 4.4);
+    this.rootGroup.rotation.set(0, Math.PI * 0.98, 0);
 
-    // Reset Joint Angles
+    // Reset Joint Angles to neutral standing posture
     this.leftHip.rotation.set(0, 0, 0);
     this.leftKnee.rotation.set(0, 0, 0);
     this.rightHip.rotation.set(0, 0, 0);
@@ -388,55 +386,15 @@ export class AnimatedAvatar {
     this.rightShoulder.rotation.set(0, 0, 0);
     this.rightElbow.rotation.set(0, 0, 0);
     this.headGroup.rotation.set(0, 0, 0);
+    this.bodyGroup.position.set(0, 0, 0);
+    this.bodyGroup.rotation.set(0, 0, 0);
 
-    // 1. START WALKING ALONG OPEN AISLE CURVE (Never touches fridge cabinet or doors)
-    this.state = 'walking';
-    this.walkProgress = 0;
-    this.walkTime = 0;
-
-    const animProgress = { t: 0 };
-    const walkTween = new TWEEN.Tween(animProgress)
-      .to({ t: 1.0 }, 3400)
-      .easing(TWEEN.Easing.Quadratic.InOut)
-      .onUpdate(() => {
-        const pt = this.walkCurve.getPoint(animProgress.t);
-        this.rootGroup.position.copy(pt);
-        const tangent = this.walkCurve.getTangent(animProgress.t);
-        this.rootGroup.rotation.y = Math.atan2(tangent.x, tangent.z);
-      })
-      .onComplete(() => {
-        // Stop walking, settle into standing posture
-        this.settleIntoStanding();
-      });
-
-    this.activeTweens.push(walkTween);
-    walkTween.start();
+    // Smoothly reach right arm into shelf towards the Honeycrisp apple
+    this.executeReachAndGrasp();
   }
 
   private settleIntoStanding() {
-    this.state = 'reaching';
-
-    // Ease legs back to neutral stance
-    const lHip = new TWEEN.Tween(this.leftHip.rotation).to({ x: 0 }, 350);
-    const lKnee = new TWEEN.Tween(this.leftKnee.rotation).to({ x: 0 }, 350);
-    const rHip = new TWEEN.Tween(this.rightHip.rotation).to({ x: 0 }, 350);
-    const rKnee = new TWEEN.Tween(this.rightKnee.rotation).to({ x: 0 }, 350);
-    const lSh = new TWEEN.Tween(this.leftShoulder.rotation).to({ x: 0.1 }, 350);
-    const bodyBounce = new TWEEN.Tween(this.bodyGroup.position).to({ y: 0 }, 350);
-
-    lHip.start(); lKnee.start(); rHip.start(); rKnee.start(); lSh.start(); bodyBounce.start();
-    this.activeTweens.push(lHip, lKnee, rHip, rKnee, lSh, bodyBounce);
-
-    // Align avatar to face directly into the middle shelf towards the apple
-    const alignTween = new TWEEN.Tween(this.rootGroup.rotation)
-      .to({ y: Math.PI * 0.98 }, 350)
-      .easing(TWEEN.Easing.Cubic.Out)
-      .onComplete(() => {
-        this.executeReachAndGrasp();
-      });
-
-    this.activeTweens.push(alignTween);
-    alignTween.start();
+    this.executeReachAndGrasp();
   }
 
   private executeReachAndGrasp() {
@@ -542,7 +500,7 @@ export class AnimatedAvatar {
   }
 
   public takeAnotherBite() {
-    if (this.state === 'walking' || this.state === 'reaching') return;
+    this.rootGroup.position.set(0.1, -6.8, 4.4);
 
     if (this.state === 'hidden' || !this.group.visible) {
       this.show();
@@ -550,6 +508,8 @@ export class AnimatedAvatar {
     }
 
     this.stopActiveTweens();
+    this.wholeAppleMesh.visible = false;
+    this.bittenAppleMesh.visible = true;
     this.state = 'lifting';
 
     const liftShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
