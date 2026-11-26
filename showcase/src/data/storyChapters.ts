@@ -93,8 +93,8 @@ export const CHAPTERS: ChapterData[] = [
     alignment: "left",
     actionBtnText: "Trigger Swarm Sync (42 KB) ⚡",
     actionType: "federated_modal",
-    camPos: [-2.5, 17.0, 31.0],
-    camTarget: [1.2, 0.0, 0],
+    camPos: [-4.5, 14.0, 28.0],
+    camTarget: [1.5, 3.5, 0],
     sceneFocus: "federated_mesh"
   },
 
@@ -163,8 +163,8 @@ export const CHAPTERS: ChapterData[] = [
     alignment: "left",
     actionBtnText: "Simulate Swarm Weight Sync (42 KB) ⚡",
     actionType: "federated_modal",
-    camPos: [-2.2, 16.0, 29.5],
-    camTarget: [1.2, 0.0, 0],
+    camPos: [-4.0, 13.0, 26.5],
+    camTarget: [1.5, 3.5, 0],
     sceneFocus: "federated_mesh"
   },
 
