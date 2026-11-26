@@ -48,6 +48,18 @@ If you want to talk to the fridge locally:
 
 ---
 
+## 5. Start the Interactive 3D Showcase (Resume Visualizer)
+The Awwwards-caliber 3D portfolio showcase designed for resume links:
+
+1. Open a terminal.
+2. Run this command:
+   ```bash
+   cd showcase && ./start.sh
+   ```
+3. Open your browser to: **http://localhost:5175**
+
+---
+
 ### IMPORTANT: Folder Hierarchy
 Make sure you are always in the project root folder:
 `/Users/SAC project/fedcausalfreshnet2`

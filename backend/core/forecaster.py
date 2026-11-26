@@ -8,7 +8,7 @@ def predict_consumption_rate(item_name: str):
     """
     db = SessionLocal()
     try:
-        # Get last 10 snapshots
+        # Get last 10 snapshots 
         snapshots = db.query(SnapshotHistory).order_by(SnapshotHistory.timestamp.desc()).limit(10).all()
         
         if len(snapshots) < 2:

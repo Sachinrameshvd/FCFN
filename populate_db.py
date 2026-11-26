@@ -97,18 +97,18 @@ def populate_database(num_items=500):
             status=status
         )
         items_to_add.append(item)
-    
+        
     # Bulk insert for speed
     db.bulk_save_objects(items_to_add)
     db.commit()
-    
+
     # Stats
     total = db.query(Item).count()
     expired = db.query(Item).filter(Item.status == 'expired').count()
     fresh = db.query(Item).filter(Item.status == 'fresh').count()
-    
+
     db.close()
-    
+
     print("\n✅ Database Population Complete!")
     print(f"📊 Total items in DB: {total}")
     print(f"🥦 Fresh: {fresh} | ⚠️ Expiring Soon: {total - fresh - expired} | ❌ Expired: {expired}")

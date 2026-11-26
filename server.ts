@@ -41,6 +41,39 @@ db.exec(`
     last_sync DATETIME,
     contribution_count INTEGER DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS shopping_list (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT,
+    priority TEXT DEFAULT 'medium',
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS community_board (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    donor_id TEXT DEFAULT 'You',
+    expiry_at DATETIME,
+    location TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS community_requests (
+    id TEXT PRIMARY KEY,
+    item_needed TEXT NOT NULL,
+    requester TEXT NOT NULL,
+    location TEXT NOT NULL,
+    urgency TEXT DEFAULT 'Urgent',
+    reason TEXT,
+    status TEXT DEFAULT 'pending',
+    fulfilled_by TEXT,
+    responder_note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_items_expiry ON items(expiry_at, status);
+  CREATE INDEX IF NOT EXISTS idx_items_zone ON items(zone);
 `);
 
 // Seed initial data if empty
@@ -61,6 +94,21 @@ if (itemCount.count === 0) {
   seedNodes.run("node_madurai", "Madurai", new Date().toISOString(), 115);
   seedNodes.run("node_coimbatore", "Coimbatore", new Date().toISOString(), 97);
   seedNodes.run("node_lalgudi", "Lalgudi", new Date().toISOString(), 64);
+}
+
+const commCount = db.prepare("SELECT COUNT(*) as count FROM community_board").get() as { count: number };
+if (commCount.count === 0) {
+  const insertComm = db.prepare("INSERT INTO community_board (id, name, donor_id, expiry_at, location) VALUES (?, ?, ?, ?, ?)");
+  insertComm.run('comm-1', 'Tomatoes (5 nos)', 'Node-44', new Date(Date.now() + 86400000 * 2).toISOString(), 'T. Nagar, Chennai');
+  insertComm.run('comm-2', 'Drumsticks', 'Node-12', new Date(Date.now() + 86400000 * 3).toISOString(), 'Adyar, Chennai');
+}
+
+const reqCount = db.prepare("SELECT COUNT(*) as count FROM community_requests").get() as { count: number };
+if (reqCount.count === 0) {
+  const insertReq = db.prepare("INSERT INTO community_requests (id, item_needed, requester, location, urgency, reason, status, fulfilled_by, responder_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  insertReq.run('req-1', '2 Fresh Lemons & Ginger Piece', 'Plot 04 · Adyar (Flat 2B)', 'Adyar, Chennai', 'Urgent (Cooking Now!)', 'Making evening rasam & lemon tea, ran out of lemons!', 'fulfilled', 'Plot 02 · Kotturpuram (Lakshmi)', 'I have extra lemons from my terrace tree! Kept 3 on the shoe rack outside Flat 2B.');
+  insertReq.run('req-2', '1 Packet Natural Set Curd (500ml)', 'Plot 01 · Anna Nagar', 'Anna Nagar, Chennai', 'Today', 'Need for dinner curd rice, supermarket delivery got delayed.', 'pending', null, null);
+  insertReq.run('req-3', 'Few Stems of Fresh Mint (Pudina)', 'Plot 03 · Besant Nagar', 'Besant Nagar, Chennai', 'Urgent (Cooking Now!)', 'Garnishing biryani, vendor ran out of mint this afternoon.', 'pending', null, null);
 }
 
 function calculateExpiry(category: string, zone: string, vendorType: string) {
@@ -111,39 +159,35 @@ async function startServer() {
     res.json({ id: info.lastInsertRowid });
   });
 
-  // Mock data for new features
-  let shoppingList: any[] = [];
-  let communityBoard: any[] = [
-    { id: 'comm-1', name: 'Tomatoes (5 nos)', donor_id: 'Node-44', expiry_at: new Date(Date.now() + 86400000 * 2).toISOString(), location: 'T. Nagar, Chennai' },
-    { id: 'comm-2', name: 'Drumsticks', donor_id: 'Node-12', expiry_at: new Date(Date.now() + 86400000 * 3).toISOString(), location: 'Adyar, Chennai' }
-  ];
+
 
   app.delete("/api/items/:id", (req, res) => {
     const item = db.prepare("SELECT name, category FROM items WHERE id = ?").get(req.params.id) as any;
     if (item) {
-      shoppingList.push({ id: `shop-${Date.now()}`, name: item.name, category: item.category, priority: 'medium' });
+      const shopId = `shop-${Date.now()}`;
+      db.prepare("INSERT INTO shopping_list (id, name, category, priority) VALUES (?, ?, ?, ?)")
+        .run(shopId, item.name, item.category, 'medium');
     }
     db.prepare("DELETE FROM items WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
-  // Shopping List
-  app.get("/api/shopping", (req, res) => res.json(shoppingList));
+  // Shopping List (SQLite Persisted)
+  app.get("/api/shopping", (req, res) => {
+    const list = db.prepare("SELECT * FROM shopping_list ORDER BY added_at DESC").all();
+    res.json(list);
+  });
 
   app.post("/api/shopping/sync-expired", (req, res) => {
     const now = new Date().toISOString();
     const expiredItems = db.prepare("SELECT * FROM items WHERE expiry_at < ?").all(now) as any[];
 
     expiredItems.forEach(item => {
-      // Check if already in shopping list to avoid duplicates
-      const exists = shoppingList.find(s => s.name.toLowerCase() === item.name.toLowerCase());
-      if (!exists) {
-        shoppingList.push({
-          id: `shop-exp-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          name: item.name,
-          category: item.category,
-          priority: 'high'
-        });
+      const existing = db.prepare("SELECT id FROM shopping_list WHERE LOWER(name) = LOWER(?)").get(item.name);
+      if (!existing) {
+        const shopId = `shop-exp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        db.prepare("INSERT INTO shopping_list (id, name, category, priority) VALUES (?, ?, ?, ?)")
+          .run(shopId, item.name, item.category, 'high');
       }
     });
 
@@ -155,17 +199,159 @@ async function startServer() {
   });
 
   app.delete("/api/shopping/:id", (req, res) => {
-    shoppingList = shoppingList.filter(i => String(i.id) !== String(req.params.id));
+    db.prepare("DELETE FROM shopping_list WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
-  // Community Board
-  app.get("/api/community", (req, res) => res.json(communityBoard));
+  // Causal SCM Graph (DoWhy Chennai Micro-Climate DAG)
+  app.get("/api/causal/graph", (req, res) => {
+    res.json({
+      nodes: [
+        {
+          id: "humidity",
+          label: "Chennai Coastal Humidity (92% RH)",
+          type: "confounder",
+          description: "High ambient coastal moisture enters during door openings, accelerating bacterial and fungal spore germination on produce surfaces.",
+          x: 90,
+          y: 60
+        },
+        {
+          id: "ethylene",
+          label: "Ethylene Gas Trapping",
+          type: "confounder",
+          description: "Ripening hormones emitted by climacteric fruits (apples, tomatoes) pool in stagnant shelf micro-zones, inducing premature rotting.",
+          x: 90,
+          y: 170
+        },
+        {
+          id: "door",
+          label: "Door Opening Thermal Shock",
+          type: "confounder",
+          description: "Frequent ambient air ingress creates severe thermal gradients and condensation cycles.",
+          x: 90,
+          y: 280
+        },
+        {
+          id: "zone",
+          label: "Chamber Shelf Zone",
+          type: "treatment",
+          description: "Target physical micro-climate placement: Back Chiller [do(Zone=Back)] vs Middle vs Door Balcony.",
+          x: 295,
+          y: 90
+        },
+        {
+          id: "airflow",
+          label: "Laminar Airflow (0.45 m/s)",
+          type: "mediator",
+          description: "Fluid jet streams disrupt stagnant moisture boundary layers and dilute ethylene concentration.",
+          x: 295,
+          y: 250
+        },
+        {
+          id: "freshness",
+          label: "Freshness Lifespan (Days)",
+          type: "outcome",
+          description: "Cellular firmness, nutrient retention, and invariant days before tissue breakdown occurs.",
+          x: 515,
+          y: 170
+        }
+      ],
+      edges: [
+        { source: "humidity", target: "freshness", label: "Fungal Spore Proliferation (+0.74 corr)" },
+        { source: "humidity", target: "zone", label: "Confounder Backdoor Path" },
+        { source: "door", target: "freshness", label: "Thermal Shock Decay" },
+        { source: "door", target: "zone", label: "Confounder Backdoor Path" },
+        { source: "ethylene", target: "freshness", label: "Hormonal Ripening Trigger" },
+        { source: "zone", target: "airflow", label: "Fluid Jet Deflection" },
+        { source: "airflow", target: "freshness", label: "Direct Physical Mechanism" },
+        { source: "zone", target: "freshness", label: "True Causal Treatment Effect (+2.86d)" }
+      ]
+    });
+  });
+
+  // Community Board (SQLite Persisted)
+  app.get("/api/community", (req, res) => {
+    const board = db.prepare("SELECT * FROM community_board ORDER BY created_at DESC").all();
+    res.json(board);
+  });
+
   app.post("/api/community/share", (req, res) => {
     const { name, expiry_at, location } = req.body;
-    const newItem = { id: `comm-user-${Date.now()}`, name, donor_id: 'You', expiry_at, location };
-    communityBoard.push(newItem);
-    res.json(newItem);
+    const commId = `comm-user-${Date.now()}`;
+    const donor = 'You';
+    const loc = location || 'T. Nagar, Chennai';
+    db.prepare("INSERT INTO community_board (id, name, donor_id, expiry_at, location) VALUES (?, ?, ?, ?, ?)")
+      .run(commId, name, donor, expiry_at, loc);
+    res.json({ id: commId, name, donor_id: donor, expiry_at, location: loc });
+  });
+
+  // Community Requests / Borrow Wishlist (Two-way P2P Exchange)
+  app.get("/api/community/requests", (req, res) => {
+    try {
+      const requests = db.prepare("SELECT * FROM community_requests ORDER BY created_at DESC").all();
+      res.json(requests);
+    } catch (e) {
+      console.error("Error fetching community requests:", e);
+      res.status(500).json({ error: "Failed to fetch requests" });
+    }
+  });
+
+  app.post("/api/community/requests", (req, res) => {
+    try {
+      const { item_needed, requester, location, urgency, reason } = req.body;
+      const id = `req-${Date.now()}`;
+      const reqName = requester || 'Plot 04 · Adyar (You)';
+      const reqLoc = location || 'Adyar, Chennai';
+      const reqUrg = urgency || 'Urgent (Cooking Now!)';
+      const reqReason = reason || 'Ran out of ingredient while preparing dinner';
+      
+      db.prepare(`
+        INSERT INTO community_requests (id, item_needed, requester, location, urgency, reason, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+      `).run(id, item_needed, reqName, reqLoc, reqUrg, reqReason);
+      
+      const newReq = db.prepare("SELECT * FROM community_requests WHERE id = ?").get(id);
+      res.json(newReq);
+    } catch (e) {
+      console.error("Error creating community request:", e);
+      res.status(500).json({ error: "Failed to create request" });
+    }
+  });
+
+  app.post("/api/community/requests/:id/respond", (req, res) => {
+    try {
+      const { responder_name, responder_note } = req.body;
+      const respName = responder_name || 'Plot 04 · Adyar (You)';
+      const respNote = responder_note || 'I have extra in my fridge! Kept outside door.';
+      
+      db.prepare(`
+        UPDATE community_requests 
+        SET status = 'fulfilled', fulfilled_by = ?, responder_note = ? 
+        WHERE id = ?
+      `).run(respName, respNote, req.params.id);
+
+      const updated = db.prepare("SELECT * FROM community_requests WHERE id = ?").get(req.params.id);
+      res.json(updated);
+    } catch (e) {
+      console.error("Error responding to community request:", e);
+      res.status(500).json({ error: "Failed to respond to request" });
+    }
+  });
+
+  app.post("/api/community/requests/:id/complete", (req, res) => {
+    try {
+      db.prepare(`
+        UPDATE community_requests 
+        SET status = 'completed' 
+        WHERE id = ?
+      `).run(req.params.id);
+
+      const updated = db.prepare("SELECT * FROM community_requests WHERE id = ?").get(req.params.id);
+      res.json(updated);
+    } catch (e) {
+      console.error("Error completing community request:", e);
+      res.status(500).json({ error: "Failed to complete request" });
+    }
   });
 
   // Market Trends
@@ -243,6 +429,20 @@ async function startServer() {
     } catch (error) {
       console.warn("Forecast proxy failed:", error);
       res.status(503).json({ error: "Forecast service unreachable" });
+    }
+  });
+
+  app.get("/api/health", (req, res) => {
+    try {
+      const itemCheck = db.prepare("SELECT COUNT(*) as count FROM items").get() as { count: number };
+      res.json({
+        status: "healthy",
+        database: "connected",
+        item_count: itemCheck.count,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e: any) {
+      res.status(500).json({ status: "unhealthy", error: e.message });
     }
   });
 

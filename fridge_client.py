@@ -13,7 +13,7 @@ class SpoilageNet(nn.Module):
             nn.ReLU(),
             nn.Linear(16, 1)
         )
-
+        
     def forward(self, x):
         return self.fc(x)
 
@@ -67,15 +67,15 @@ def main():
 
     server_address = sys.argv[1]
     cid = sys.argv[2]
-    
+
     print(f"---------------------------------------------------------")
     print(f"🤖 FRIDGE {cid} STARTING LOCAL AI")
     print(f"Connecting to Cloud Server at: {server_address}")
     print(f"---------------------------------------------------------")
-    
+
     model = SpoilageNet()
     client = FridgeClient(model, cid)
-    
+
     # Start Flower client
     fl.client.start_numpy_client(
         server_address=server_address,
