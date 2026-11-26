@@ -7,8 +7,8 @@ export type AvatarState = 'hidden' | 'walking' | 'reaching' | 'lifting' | 'chewi
 /**
  * AnimatedAvatar: Fully Articulated 3D Humanoid Character
  * Biomechanical Walk Cycle & Apple Eating Sequence:
- * 1. Walks into the kitchen scene from the front-left aisle.
- * 2. Steps up to the Sub-Zero fridge, reaches right arm into the middle shelf.
+ * 1. Walks into the kitchen scene from the central aisle (completely clears open doors).
+ * 2. Steps smoothly up to the Sub-Zero fridge, reaches right arm into the middle shelf.
  * 3. Grasps the Honeycrisp apple (shelf apple disappears, hand apple appears).
  * 4. Turns toward the viewer / camera and lifts the crisp apple to mouth.
  * 5. Takes a crisp bite with procedural audio crunch, glistening juice particle spray, and screen recoil.
@@ -50,17 +50,20 @@ export class AnimatedAvatar {
   // State Management
   public state: AvatarState = 'hidden';
   private walkTime: number = 0;
+  private walkProgress: number = 0;
+  private walkDuration: number = 2.0; // 2 seconds confident walk from aisle directly to fridge shelf
   private chewTime: number = 0;
   private idleTime: number = 0;
-  private walkObj = { progress: 0 };
 
-  // Smooth Catmull-Rom natural walking path from kitchen aisle directly to fridge middle shelf
-  // Starts in visible front-left kitchen aisle, strides forward past open door, curves to middle shelf
+  // Clear Central Aisle Walking Path:
+  // Both open French doors are at x = -6.4 and x = +6.4.
+  // This path walks right down the unobstructed illuminated central aisle (x between -1.8 and -0.2),
+  // leaving 4.5+ units of clearance on both sides, with ZERO DOOR COLLISION!
   private walkCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-6.2, -6.8, 9.8),  // Starts visible in kitchen aisle
-    new THREE.Vector3(-3.8, -6.8, 7.8),  // Striding forward
-    new THREE.Vector3(-1.8, -6.8, 5.8),  // Curving into doorway
-    new THREE.Vector3(-0.6, -6.8, 4.4)   // Standing at middle shelf
+    new THREE.Vector3(-1.8, -6.8, 9.8),  // Starts visible in kitchen central aisle
+    new THREE.Vector3(-1.2, -6.8, 7.6),  // Striding forward down illuminated path
+    new THREE.Vector3(-0.6, -6.8, 5.6),  // Entering wide open door aperture
+    new THREE.Vector3(-0.2, -6.8, 4.4)   // Standing gracefully right in front of middle shelf
   ]);
   private activeTweens: TWEEN.Tween<any>[] = [];
 
@@ -396,13 +399,13 @@ export class AnimatedAvatar {
     this.bittenAppleMesh.visible = false;
     if (this.onShelfAppleRestore) this.onShelfAppleRestore();
 
-    // 1. Position Avatar at start of walk path (visible kitchen aisle)
+    // 1. Position Avatar at start of clear central aisle path
     const startPoint = this.walkCurve.getPoint(0);
     this.rootGroup.position.copy(startPoint);
     const startTangent = this.walkCurve.getTangent(0);
     this.rootGroup.rotation.set(0, Math.atan2(startTangent.x, startTangent.z), 0);
 
-    // Reset Joints
+    // Reset Joints to neutral
     this.leftHip.rotation.set(0, 0, 0);
     this.leftKnee.rotation.set(0, 0, 0);
     this.rightHip.rotation.set(0, 0, 0);
@@ -414,60 +417,26 @@ export class AnimatedAvatar {
     this.bodyGroup.position.set(0, 0, 0);
     this.bodyGroup.rotation.set(0, 0, 0);
 
+    // Start Walking (governed deterministically in update loop)
     this.state = 'walking';
+    this.walkProgress = 0;
     this.walkTime = 0;
-    this.walkObj.progress = 0;
-
-    // 2. Animate Walking In Along Catmull-Rom Path (~1.8 seconds)
-    const walkTween = new TWEEN.Tween(this.walkObj)
-      .to({ progress: 1.0 }, 1800)
-      .easing(TWEEN.Easing.Quadratic.Out)
-      .onUpdate(() => {
-        const pt = this.walkCurve.getPoint(this.walkObj.progress);
-        this.rootGroup.position.copy(pt);
-        const tangent = this.walkCurve.getTangent(this.walkObj.progress);
-        this.rootGroup.rotation.y = Math.atan2(tangent.x, tangent.z);
-      })
-      .onComplete(() => {
-        // Stop walking, settle into standing posture
-        this.state = 'reaching';
-        this.leftHip.rotation.set(0, 0, 0);
-        this.leftKnee.rotation.set(0, 0, 0);
-        this.rightHip.rotation.set(0, 0, 0);
-        this.rightKnee.rotation.set(0, 0, 0);
-        this.leftShoulder.rotation.set(0, 0, 0);
-        this.bodyGroup.position.set(0, 0, 0);
-        this.bodyGroup.rotation.set(0, 0, 0);
-
-        // Face squarely toward the open fridge middle shelf
-        const turnFridge = new TWEEN.Tween(this.rootGroup.rotation)
-          .to({ y: Math.PI * 0.88 }, 450)
-          .easing(TWEEN.Easing.Cubic.Out);
-
-        turnFridge.start();
-        this.activeTweens.push(turnFridge);
-
-        this.executeReachAndGrasp();
-      });
-
-    walkTween.start();
-    this.activeTweens.push(walkTween);
   }
 
   private executeReachAndGrasp() {
     this.state = 'reaching';
 
-    // Reach right arm into middle shelf directly towards the Honeycrisp apple
+    // Reach right arm directly into middle shelf towards the Honeycrisp apple
     const reachShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.35, y: -0.32, z: 0.15 }, 850)
+      .to({ x: -1.35, y: -0.28, z: 0.15 }, 800)
       .easing(TWEEN.Easing.Cubic.Out);
 
     const reachElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -0.35, y: 0.1, z: 0 }, 850)
+      .to({ x: -0.35, y: 0.1, z: 0 }, 800)
       .easing(TWEEN.Easing.Cubic.Out);
 
     const reachHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.22, y: -0.15, z: 0 }, 850)
+      .to({ x: 0.22, y: -0.12, z: 0 }, 800)
       .easing(TWEEN.Easing.Cubic.Out);
 
     // Grasp apple
@@ -518,10 +487,10 @@ export class AnimatedAvatar {
       this.triggerJuiceBurst();
       if (this.onBiteImpact) this.onBiteImpact();
 
-      // Chew for 800ms then transition to presentation
+      // Chew for 850ms then transition to presentation
       setTimeout(() => {
         this.executeSavorPresentation();
-      }, 800);
+      }, 850);
     });
 
     turnToCamera.start();
@@ -592,7 +561,7 @@ export class AnimatedAvatar {
 
       setTimeout(() => {
         this.executeSavorPresentation();
-      }, 700);
+      }, 750);
     });
 
     liftShoulder.start();
@@ -640,35 +609,60 @@ export class AnimatedAvatar {
   }
 
   // ===========================================================================
-  // 5. UPDATE LOOP (BIOMECHANICAL WALK CYCLE & IDLE BREATHING)
+  // 5. UPDATE LOOP (DETERMINISTIC WALK FORWARD & IDLE BREATHING)
   // ===========================================================================
   public update(delta: number) {
     if (!this.group.visible) return;
 
     this.idleTime += delta;
 
-    // A. BIOMECHANICAL WALK CYCLE
+    // A. BIOMECHANICAL WALK CYCLE & DETERMINISTIC POSITION ADVANCE
     if (this.state === 'walking') {
-      const walkSpeed = 7.5; // Stride frequency
+      this.walkProgress += delta / this.walkDuration;
+      const t = Math.min(1.0, this.walkProgress);
+
+      // Smooth Quadratic Ease-Out for Walk Path
+      const easeT = 1 - (1 - t) * (1 - t);
+      const pt = this.walkCurve.getPoint(easeT);
+      this.rootGroup.position.copy(pt);
+
+      if (easeT < 0.98) {
+        const tangent = this.walkCurve.getTangent(easeT);
+        this.rootGroup.rotation.y = Math.atan2(tangent.x, tangent.z);
+      }
+
+      // Dynamic Leg & Arm Opposition Striding
+      const walkSpeed = 7.2;
       this.walkTime += delta * walkSpeed;
 
       const legStride = Math.sin(this.walkTime);
-      this.leftHip.rotation.x = legStride * 0.55;
-      this.rightHip.rotation.x = -legStride * 0.55;
+      this.leftHip.rotation.x = legStride * 0.52;
+      this.rightHip.rotation.x = -legStride * 0.52;
 
-      this.leftKnee.rotation.x = Math.max(0, -legStride) * 0.7;
-      this.rightKnee.rotation.x = Math.max(0, legStride) * 0.7;
+      this.leftKnee.rotation.x = Math.max(0, -legStride) * 0.65;
+      this.rightKnee.rotation.x = Math.max(0, legStride) * 0.65;
 
-      // Arm counter-swing
       this.leftShoulder.rotation.x = -legStride * 0.45;
       this.rightShoulder.rotation.x = legStride * 0.45;
       this.rightElbow.rotation.x = -0.3 + Math.abs(legStride) * 0.25;
 
-      // Pelvic vertical bounce
+      // Pelvic vertical bounce & subtle torso sway
       this.bodyGroup.position.y = Math.abs(Math.sin(this.walkTime)) * 0.12;
-
-      // Subtle lateral torso sway
       this.bodyGroup.rotation.z = Math.sin(this.walkTime) * 0.035;
+
+      // Deterministic arrival at middle shelf
+      if (t >= 1.0) {
+        this.state = 'reaching';
+        this.leftHip.rotation.set(0, 0, 0);
+        this.leftKnee.rotation.set(0, 0, 0);
+        this.rightHip.rotation.set(0, 0, 0);
+        this.rightKnee.rotation.set(0, 0, 0);
+        this.leftShoulder.rotation.set(0, 0, 0);
+        this.bodyGroup.position.set(0, 0, 0);
+        this.bodyGroup.rotation.set(0, 0, 0);
+
+        this.executeReachAndGrasp();
+      }
     }
 
     // B. CHEWING ANIMATION (Jaw/Head Bobs)

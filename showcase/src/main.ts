@@ -605,6 +605,15 @@ function initShowcase() {
       const target = e.currentTarget as HTMLElement;
       const jumpIdx = parseInt(target.getAttribute('data-jump') || '0', 10);
       goToChapter(jumpIdx);
+
+      // Keep window scroll in perfect lockstep with the selected chapter
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll > 0) {
+        window.scrollTo({
+          top: (jumpIdx / (CHAPTERS.length - 1)) * maxScroll,
+          behavior: 'instant'
+        });
+      }
     });
   });
 
