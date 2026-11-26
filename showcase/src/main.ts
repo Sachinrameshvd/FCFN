@@ -144,7 +144,7 @@ function initShowcase() {
     <!-- Editorial Scroll Runway -->
     <div class="scroll-runway">
       ${CHAPTERS.map((chap, idx) => `
-        <div class="chapter-overlay ${idx === 0 ? 'visible' : ''} ${chap.alignment === 'right' ? 'align-right' : chap.alignment === 'center' ? 'align-center' : ''}" data-chapter="${idx}">
+        <div class="chapter-overlay ${chap.alignment === 'right' ? 'align-right' : chap.alignment === 'center' ? 'align-center' : ''}" data-chapter="${idx}">
           <div class="editorial-card">
             <!-- Eyebrow Tag -->
             <div class="card-eyebrow">
@@ -460,12 +460,7 @@ function initShowcase() {
   if (!canvasContainer) return;
   const experience = new FridgeExperience(canvasContainer, soundEngine);
 
-  // Entrance Choreography: Ensure Chapter 0 is active and visible
-  const firstOverlay = document.querySelector('.chapter-overlay[data-chapter="0"]');
-  if (firstOverlay) {
-    firstOverlay.classList.add('visible');
-  }
-
+  // Entrance Choreography: Reveal Chapter 0 smoothly as entrance rotation finishes
   experience.onEntranceComplete = () => {
     if (currentChapter === 0) {
       const overlay0 = document.querySelector('.chapter-overlay[data-chapter="0"]');

@@ -232,17 +232,22 @@ export class FridgeExperience {
       this.currentTween.stop();
     }
 
-    // 1. Ensure fridge is visible, doors open, crisp and illuminated
+    // 1. Initial State: fridge starts pulled back, rotated 360 degrees with doors closed
     this.fridge.setHeroPopUp(false);
-    this.fridge.setDoorOpen(true);
+    this.fridge.setDoorOpen(false);
     this.fridge.group.visible = true;
     this.federatedMesh.group.visible = false;
     this.ethyleneSim.group.visible = true;
     this.groundGrid.visible = true;
     this.setCrisisMode(true);
 
-    if (this.keyLight) this.keyLight.intensity = 2.6;
-    if (this.interiorLight) this.interiorLight.intensity = 2.0;
+    this.fridge.group.rotation.y = -Math.PI * 2.0;
+    this.fridge.group.position.set(0, 0, -4.5);
+    this.camera.position.set(0, 4.0, 24.0);
+    this.controls.target.set(0, 0.5, 0);
+
+    if (this.keyLight) this.keyLight.intensity = 1.0;
+    if (this.interiorLight) this.interiorLight.intensity = 0.0;
 
     const chapter0 = CHAPTERS[0];
     const finalCamX = chapter0?.camPos[0] || -5.6;
@@ -252,18 +257,19 @@ export class FridgeExperience {
     const finalTargetY = chapter0?.camTarget[1] || 0.3;
     const finalTargetZ = chapter0?.camTarget[2] || 0;
 
-    // Smooth, guaranteed glide landing on Chapter 0
     const animState = {
-      rotY: -0.3,
-      posZ: -1.2,
-      camX: finalCamX - 1.2,
-      camY: finalCamY + 0.6,
-      camZ: finalCamZ + 2.4,
-      lightKey: 1.8,
-      targetX: finalTargetX,
-      targetY: finalTargetY,
-      targetZ: finalTargetZ
+      rotY: -Math.PI * 2.0,
+      posZ: -4.5,
+      camX: 0,
+      camY: 4.0,
+      camZ: 24.0,
+      lightKey: 1.0,
+      targetX: 0,
+      targetY: 0.5,
+      targetZ: 0
     };
+
+    let doorOpened = false;
 
     this.currentTween = new TWEEN.Tween(animState)
       .to({
@@ -276,7 +282,7 @@ export class FridgeExperience {
         targetX: finalTargetX,
         targetY: finalTargetY,
         targetZ: finalTargetZ
-      }, 1100)
+      }, 2200)
       .easing(TWEEN.Easing.Cubic.Out)
       .onUpdate(() => {
         this.fridge.group.rotation.y = animState.rotY;
@@ -285,6 +291,13 @@ export class FridgeExperience {
         this.controls.target.set(animState.targetX, animState.targetY, animState.targetZ);
         this.camera.lookAt(animState.targetX, animState.targetY, animState.targetZ);
         if (this.keyLight) this.keyLight.intensity = animState.lightKey;
+
+        // When 70% of rotation is complete, trigger French doors to smoothly swing open
+        if (!doorOpened && animState.rotY > -Math.PI * 0.7) {
+          doorOpened = true;
+          this.fridge.setDoorOpen(true);
+          if (this.interiorLight) this.interiorLight.intensity = 2.0;
+        }
       })
       .onComplete(() => {
         this.fridge.group.rotation.y = 0;
@@ -301,10 +314,14 @@ export class FridgeExperience {
       })
       .start();
 
-    // Trigger onEntranceComplete immediately so Chapter 0 slide is ALWAYS visible
-    if (this.onEntranceComplete) {
-      this.onEntranceComplete();
-    }
+    // Safety fallback: ensure onEntranceComplete fires even if tween stops or tab is backgrounded
+    setTimeout(() => {
+      this.fridge.setDoorOpen(true);
+      if (this.interiorLight) this.interiorLight.intensity = 2.0;
+      if (this.onEntranceComplete) {
+        this.onEntranceComplete();
+      }
+    }, 2400);
   }
 
   public flyToChapter(index: number, duration: number = 1500) {
