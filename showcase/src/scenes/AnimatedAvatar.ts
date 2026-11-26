@@ -1,19 +1,39 @@
 import * as THREE from 'three';
-import * as TWEEN from '@tweenjs/tween.js';
 import { SoundEngine } from '../audio/SoundEngine';
 
-export type AvatarState = 'hidden' | 'walking' | 'reaching' | 'lifting' | 'chewing' | 'savoring' | 'idle';
+export type AvatarState =
+  | 'hidden'
+  | 'walking'
+  | 'reaching'
+  | 'grasping'
+  | 'lifting'
+  | 'chewing'
+  | 'savoring'
+  | 'idle'
+  | 'repeat_lift'
+  | 'repeat_chew'
+  | 'repeat_lower';
+
+function smoothStep(t: number): number {
+  const c = Math.max(0, Math.min(1, t));
+  return c * c * (3 - 2 * c);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
 /**
  * AnimatedAvatar: Fully Articulated 3D Humanoid Character
- * Biomechanical Walk Cycle & Apple Eating Sequence:
+ * 100% Deterministic Frame-Rate Driven Choreography:
  * 1. Walks into the kitchen scene from the central aisle (completely clears open doors).
- * 2. Steps smoothly up to the Sub-Zero fridge, reaches right arm into the middle shelf.
- * 3. Grasps the Honeycrisp apple (shelf apple disappears, hand apple appears).
- * 4. Turns toward the viewer / camera and lifts the crisp apple to mouth.
- * 5. Takes a crisp bite with procedural audio crunch, glistening juice particle spray, and screen recoil.
- * 6. Chews with realistic jaw/head bobs, lowers arm to proudly display the bitten fruit, and savors.
- * 7. Responds to "Take Another Bite 🍎" button with instant repeat bite animation.
+ * 2. Stops gracefully in front of the middle shelf.
+ * 3. Reaches right arm forward into the shelf to pick the Honeycrisp apple.
+ * 4. Grasps the apple (shelf apple disappears, hand apple appears).
+ * 5. Turns toward the viewer / camera and lifts the crisp apple to mouth.
+ * 6. Takes a crisp bite with procedural audio crunch, glistening juice particle spray, and screen recoil.
+ * 7. Chews with realistic jaw/head bobs, lowers arm to proudly display the bitten fruit, and savors.
+ * 8. Responds to "Take Another Bite 🍎" button with instant repeat bite animation.
  */
 export class AnimatedAvatar {
   public group: THREE.Group;
@@ -52,6 +72,7 @@ export class AnimatedAvatar {
   private walkTime: number = 0;
   private walkProgress: number = 0;
   private walkDuration: number = 2.0; // 2 seconds confident walk from aisle directly to fridge shelf
+  private phaseTime: number = 0;
   private chewTime: number = 0;
   private idleTime: number = 0;
 
@@ -65,7 +86,19 @@ export class AnimatedAvatar {
     new THREE.Vector3(-0.6, -6.8, 5.6),  // Entering wide open door aperture
     new THREE.Vector3(-0.2, -6.8, 4.4)   // Standing gracefully right in front of middle shelf
   ]);
-  private activeTweens: TWEEN.Tween<any>[] = [];
+
+  // Joint Angle Targets for Choreography
+  private readonly REACH_SHOULDER = { x: -1.45, y: -0.28, z: 0.18 };
+  private readonly REACH_ELBOW = { x: -0.35, y: 0.10, z: 0.00 };
+  private readonly REACH_HEAD = { x: 0.22, y: -0.12, z: 0.00 };
+
+  private readonly MOUTH_SHOULDER = { x: -1.95, y: -0.55, z: -0.40 };
+  private readonly MOUTH_ELBOW = { x: -2.15, y: 0.28, z: 0.16 };
+  private readonly MOUTH_HEAD = { x: 0.26, y: -0.06, z: -0.04 };
+
+  private readonly SAVOR_SHOULDER = { x: -0.88, y: -0.25, z: 0.32 };
+  private readonly SAVOR_ELBOW = { x: -1.22, y: 0.22, z: -0.16 };
+  private readonly SAVOR_HEAD = { x: -0.06, y: 0.06, z: 0.00 };
 
   // Callbacks
   public onShelfAppleHide?: () => void;
@@ -391,8 +424,6 @@ export class AnimatedAvatar {
   // 4. THE FULL CHOREOGRAPHY: WALK-IN ➔ REACH ➔ GRASP ➔ TURN & BITE ➔ SAVOR
   // ===========================================================================
   public startFullSequence() {
-    this.stopActiveTweens();
-
     // Reset Visual State
     this.group.visible = true;
     this.wholeAppleMesh.visible = false;
@@ -417,112 +448,11 @@ export class AnimatedAvatar {
     this.bodyGroup.position.set(0, 0, 0);
     this.bodyGroup.rotation.set(0, 0, 0);
 
-    // Start Walking (governed deterministically in update loop)
+    // Start Walking
     this.state = 'walking';
     this.walkProgress = 0;
     this.walkTime = 0;
-  }
-
-  private executeReachAndGrasp() {
-    this.state = 'reaching';
-
-    // Reach right arm directly into middle shelf towards the Honeycrisp apple
-    const reachShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.35, y: -0.28, z: 0.15 }, 800)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const reachElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -0.35, y: 0.1, z: 0 }, 800)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const reachHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.22, y: -0.12, z: 0 }, 800)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    // Grasp apple
-    reachShoulder.onComplete(() => {
-      if (this.onShelfAppleHide) this.onShelfAppleHide();
-      this.wholeAppleMesh.visible = true;
-      this.executeLiftAndBite();
-    });
-
-    reachShoulder.start();
-    reachElbow.start();
-    reachHead.start();
-    this.activeTweens.push(reachShoulder, reachElbow, reachHead);
-  }
-
-  private executeLiftAndBite() {
-    this.state = 'lifting';
-
-    // Cinematic Move: Turn upper body toward camera so user clearly sees the bite!
-    const turnToCamera = new TWEEN.Tween(this.rootGroup.rotation)
-      .to({ y: -0.42 }, 950)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    // Lift apple up to mouth
-    const liftShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.95, y: -0.55, z: -0.40 }, 950)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    const liftElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -2.15, y: 0.28, z: 0.16 }, 950)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    const tiltHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.26, y: -0.06, z: -0.04 }, 950)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    // Crisp Bite Climax!
-    liftShoulder.onComplete(() => {
-      this.state = 'chewing';
-      this.chewTime = 0;
-
-      // Switch to Bitten Apple showing juicy white crisp interior
-      this.wholeAppleMesh.visible = false;
-      this.bittenAppleMesh.visible = true;
-
-      // Audio Crunch + Juice Droplets + Camera Recoil
-      this.soundEngine.playAppleCrunchSound();
-      this.triggerJuiceBurst();
-      if (this.onBiteImpact) this.onBiteImpact();
-
-      // Chew for 850ms then transition to presentation
-      setTimeout(() => {
-        this.executeSavorPresentation();
-      }, 850);
-    });
-
-    turnToCamera.start();
-    liftShoulder.start();
-    liftElbow.start();
-    tiltHead.start();
-    this.activeTweens.push(turnToCamera, liftShoulder, liftElbow, tiltHead);
-  }
-
-  private executeSavorPresentation() {
-    this.state = 'savoring';
-
-    // Lower arm to chest height, proudly presenting the bitten Honeycrisp apple
-    const lowerShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -0.88, y: -0.25, z: 0.32 }, 800)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const lowerElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -1.22, y: 0.22, z: -0.16 }, 800)
-      .easing(TWEEN.Easing.Cubic.Out);
-
-    const headSavor = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: -0.06, y: 0.06, z: 0 }, 800)
-      .easing(TWEEN.Easing.Cubic.Out)
-      .onComplete(() => {
-        this.state = 'idle';
-      });
-
-    lowerShoulder.start();
-    lowerElbow.start();
-    headSavor.start();
-    this.activeTweens.push(lowerShoulder, lowerElbow, headSavor);
+    this.phaseTime = 0;
   }
 
   public takeAnotherBite() {
@@ -531,43 +461,11 @@ export class AnimatedAvatar {
       return;
     }
 
-    this.stopActiveTweens();
     this.wholeAppleMesh.visible = false;
     this.bittenAppleMesh.visible = true;
-    this.state = 'lifting';
-
-    // Ensure facing camera
+    this.state = 'repeat_lift';
+    this.phaseTime = 0;
     this.rootGroup.rotation.y = -0.42;
-
-    // Lift back to mouth in 650ms
-    const liftShoulder = new TWEEN.Tween(this.rightShoulder.rotation)
-      .to({ x: -1.95, y: -0.55, z: -0.40 }, 650)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    const liftElbow = new TWEEN.Tween(this.rightElbow.rotation)
-      .to({ x: -2.15, y: 0.28, z: 0.16 }, 650)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    const tiltHead = new TWEEN.Tween(this.headGroup.rotation)
-      .to({ x: 0.26, y: -0.06, z: -0.04 }, 650)
-      .easing(TWEEN.Easing.Cubic.InOut);
-
-    liftShoulder.onComplete(() => {
-      this.state = 'chewing';
-      this.chewTime = 0;
-      this.soundEngine.playAppleCrunchSound();
-      this.triggerJuiceBurst();
-      if (this.onBiteImpact) this.onBiteImpact();
-
-      setTimeout(() => {
-        this.executeSavorPresentation();
-      }, 750);
-    });
-
-    liftShoulder.start();
-    liftElbow.start();
-    tiltHead.start();
-    this.activeTweens.push(liftShoulder, liftElbow, tiltHead);
   }
 
   private triggerJuiceBurst() {
@@ -589,11 +487,6 @@ export class AnimatedAvatar {
     this.juiceParticles.geometry.attributes.position.needsUpdate = true;
   }
 
-  private stopActiveTweens() {
-    this.activeTweens.forEach(t => t.stop());
-    this.activeTweens = [];
-  }
-
   public show() {
     this.group.visible = true;
     this.startFullSequence();
@@ -602,27 +495,27 @@ export class AnimatedAvatar {
   public hide() {
     this.group.visible = false;
     this.state = 'hidden';
-    this.stopActiveTweens();
     this.wholeAppleMesh.visible = false;
     this.bittenAppleMesh.visible = false;
     if (this.onShelfAppleRestore) this.onShelfAppleRestore();
   }
 
   // ===========================================================================
-  // 5. UPDATE LOOP (DETERMINISTIC WALK FORWARD & IDLE BREATHING)
+  // 5. DETERMINISTIC UPDATE LOOP (WALK ➔ REACH ➔ GRASP ➔ TURN & BITE ➔ SAVOR)
   // ===========================================================================
   public update(delta: number) {
-    if (!this.group.visible) return;
+    if (!this.group.visible || this.state === 'hidden') return;
 
     this.idleTime += delta;
 
-    // A. BIOMECHANICAL WALK CYCLE & DETERMINISTIC POSITION ADVANCE
+    // -------------------------------------------------------------------------
+    // PHASE 1: WALKING IN DOWN CENTRAL AISLE (~2.0 seconds)
+    // -------------------------------------------------------------------------
     if (this.state === 'walking') {
       this.walkProgress += delta / this.walkDuration;
       const t = Math.min(1.0, this.walkProgress);
 
-      // Smooth Quadratic Ease-Out for Walk Path
-      const easeT = 1 - (1 - t) * (1 - t);
+      const easeT = smoothStep(t);
       const pt = this.walkCurve.getPoint(easeT);
       this.rootGroup.position.copy(pt);
 
@@ -646,13 +539,15 @@ export class AnimatedAvatar {
       this.rightShoulder.rotation.x = legStride * 0.45;
       this.rightElbow.rotation.x = -0.3 + Math.abs(legStride) * 0.25;
 
-      // Pelvic vertical bounce & subtle torso sway
       this.bodyGroup.position.y = Math.abs(Math.sin(this.walkTime)) * 0.12;
       this.bodyGroup.rotation.z = Math.sin(this.walkTime) * 0.035;
 
-      // Deterministic arrival at middle shelf
+      // Arrived in front of middle shelf!
       if (t >= 1.0) {
         this.state = 'reaching';
+        this.phaseTime = 0;
+
+        // Reset legs & torso to grounded stance
         this.leftHip.rotation.set(0, 0, 0);
         this.leftKnee.rotation.set(0, 0, 0);
         this.rightHip.rotation.set(0, 0, 0);
@@ -660,27 +555,202 @@ export class AnimatedAvatar {
         this.leftShoulder.rotation.set(0, 0, 0);
         this.bodyGroup.position.set(0, 0, 0);
         this.bodyGroup.rotation.set(0, 0, 0);
-
-        this.executeReachAndGrasp();
+        this.rootGroup.rotation.y = Math.PI * 0.95; // Face squarely into the fridge shelf
       }
     }
 
-    // B. CHEWING ANIMATION (Jaw/Head Bobs)
-    if (this.state === 'chewing') {
-      this.chewTime += delta;
-      this.headGroup.rotation.x = 0.22 + Math.sin(this.chewTime * 14) * 0.05;
-      this.bodyGroup.position.y = Math.sin(this.chewTime * 14) * 0.015;
+    // -------------------------------------------------------------------------
+    // PHASE 2: REACHING RIGHT ARM INTO MIDDLE SHELF (0.85 seconds)
+    // -------------------------------------------------------------------------
+    else if (this.state === 'reaching') {
+      this.phaseTime += delta;
+      const progress = Math.min(1.0, this.phaseTime / 0.85);
+      const ease = smoothStep(progress);
+
+      this.rightShoulder.rotation.x = lerp(0, this.REACH_SHOULDER.x, ease);
+      this.rightShoulder.rotation.y = lerp(0, this.REACH_SHOULDER.y, ease);
+      this.rightShoulder.rotation.z = lerp(0, this.REACH_SHOULDER.z, ease);
+
+      this.rightElbow.rotation.x = lerp(0, this.REACH_ELBOW.x, ease);
+      this.rightElbow.rotation.y = lerp(0, this.REACH_ELBOW.y, ease);
+      this.rightElbow.rotation.z = lerp(0, this.REACH_ELBOW.z, ease);
+
+      this.headGroup.rotation.x = lerp(0, this.REACH_HEAD.x, ease);
+      this.headGroup.rotation.y = lerp(0, this.REACH_HEAD.y, ease);
+
+      if (progress >= 1.0) {
+        // Grasp apple!
+        if (this.onShelfAppleHide) this.onShelfAppleHide();
+        this.wholeAppleMesh.visible = true;
+
+        this.state = 'grasping';
+        this.phaseTime = 0;
+      }
     }
 
-    // C. NATURAL IDLE BREATHING & POSTURE
-    if (this.state === 'idle' || this.state === 'savoring') {
+    // -------------------------------------------------------------------------
+    // PHASE 3: GRASPING / TAKING HOLD (0.18 seconds tactile pause)
+    // -------------------------------------------------------------------------
+    else if (this.state === 'grasping') {
+      this.phaseTime += delta;
+      if (this.phaseTime >= 0.18) {
+        this.state = 'lifting';
+        this.phaseTime = 0;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PHASE 4: TURNING TO CAMERA & LIFTING APPLE TO MOUTH (1.0 second)
+    // -------------------------------------------------------------------------
+    else if (this.state === 'lifting') {
+      this.phaseTime += delta;
+      const progress = Math.min(1.0, this.phaseTime / 1.0);
+      const ease = smoothStep(progress);
+
+      // Body turns from fridge (Math.PI * 0.95) to face the camera (-0.42 rad)
+      this.rootGroup.rotation.y = lerp(Math.PI * 0.95, -0.42, ease);
+
+      // Right arm lifts apple to mouth
+      this.rightShoulder.rotation.x = lerp(this.REACH_SHOULDER.x, this.MOUTH_SHOULDER.x, ease);
+      this.rightShoulder.rotation.y = lerp(this.REACH_SHOULDER.y, this.MOUTH_SHOULDER.y, ease);
+      this.rightShoulder.rotation.z = lerp(this.REACH_SHOULDER.z, this.MOUTH_SHOULDER.z, ease);
+
+      this.rightElbow.rotation.x = lerp(this.REACH_ELBOW.x, this.MOUTH_ELBOW.x, ease);
+      this.rightElbow.rotation.y = lerp(this.REACH_ELBOW.y, this.MOUTH_ELBOW.y, ease);
+      this.rightElbow.rotation.z = lerp(this.REACH_ELBOW.z, this.MOUTH_ELBOW.z, ease);
+
+      this.headGroup.rotation.x = lerp(this.REACH_HEAD.x, this.MOUTH_HEAD.x, ease);
+      this.headGroup.rotation.y = lerp(this.REACH_HEAD.y, this.MOUTH_HEAD.y, ease);
+
+      if (progress >= 1.0) {
+        // CRISP BITE IMPACT!
+        this.state = 'chewing';
+        this.phaseTime = 0;
+        this.chewTime = 0;
+
+        // Swap to bitten apple with fresh white pulp
+        this.wholeAppleMesh.visible = false;
+        this.bittenAppleMesh.visible = true;
+
+        // Crunch Audio + Juice Particles + Camera Recoil
+        this.soundEngine.playAppleCrunchSound();
+        this.triggerJuiceBurst();
+        if (this.onBiteImpact) this.onBiteImpact();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PHASE 5: CHEWING THE FRESH CRISP APPLE (0.9 seconds)
+    // -------------------------------------------------------------------------
+    else if (this.state === 'chewing') {
+      this.phaseTime += delta;
+      this.chewTime += delta;
+
+      // Realistic chewing jaw & head nods
+      this.headGroup.rotation.x = this.MOUTH_HEAD.x + Math.sin(this.chewTime * 14) * 0.05;
+      this.bodyGroup.position.y = Math.sin(this.chewTime * 14) * 0.015;
+
+      if (this.phaseTime >= 0.9) {
+        this.state = 'savoring';
+        this.phaseTime = 0;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PHASE 6: LOWERING ARM TO PROUDLY DISPLAY BITTEN APPLE (0.8 seconds)
+    // -------------------------------------------------------------------------
+    else if (this.state === 'savoring') {
+      this.phaseTime += delta;
+      const progress = Math.min(1.0, this.phaseTime / 0.8);
+      const ease = smoothStep(progress);
+
+      this.rightShoulder.rotation.x = lerp(this.MOUTH_SHOULDER.x, this.SAVOR_SHOULDER.x, ease);
+      this.rightShoulder.rotation.y = lerp(this.MOUTH_SHOULDER.y, this.SAVOR_SHOULDER.y, ease);
+      this.rightShoulder.rotation.z = lerp(this.MOUTH_SHOULDER.z, this.SAVOR_SHOULDER.z, ease);
+
+      this.rightElbow.rotation.x = lerp(this.MOUTH_ELBOW.x, this.SAVOR_ELBOW.x, ease);
+      this.rightElbow.rotation.y = lerp(this.MOUTH_ELBOW.y, this.SAVOR_ELBOW.y, ease);
+      this.rightElbow.rotation.z = lerp(this.MOUTH_ELBOW.z, this.SAVOR_ELBOW.z, ease);
+
+      this.headGroup.rotation.x = lerp(this.MOUTH_HEAD.x, this.SAVOR_HEAD.x, ease);
+      this.headGroup.rotation.y = lerp(this.MOUTH_HEAD.y, this.SAVOR_HEAD.y, ease);
+
+      if (progress >= 1.0) {
+        this.state = 'idle';
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PHASE 7: IDLE BREATHING WHILE DISPLAYING BITTEN APPLE
+    // -------------------------------------------------------------------------
+    else if (this.state === 'idle') {
       const breath = Math.sin(this.idleTime * 1.5) * 0.02;
       this.bodyGroup.position.y = breath;
       this.headGroup.position.y = 9.2 + breath * 0.4;
-      this.headGroup.rotation.y = 0.06 + Math.sin(this.idleTime * 0.8) * 0.03;
+      this.headGroup.rotation.y = this.SAVOR_HEAD.y + Math.sin(this.idleTime * 0.8) * 0.03;
     }
 
-    // D. JUICE DROPLET PARTICLES
+    // -------------------------------------------------------------------------
+    // "TAKE ANOTHER BITE" REPEAT SEQUENCE
+    // -------------------------------------------------------------------------
+    else if (this.state === 'repeat_lift') {
+      this.phaseTime += delta;
+      const progress = Math.min(1.0, this.phaseTime / 0.55);
+      const ease = smoothStep(progress);
+
+      this.rightShoulder.rotation.x = lerp(this.SAVOR_SHOULDER.x, this.MOUTH_SHOULDER.x, ease);
+      this.rightShoulder.rotation.y = lerp(this.SAVOR_SHOULDER.y, this.MOUTH_SHOULDER.y, ease);
+      this.rightShoulder.rotation.z = lerp(this.SAVOR_SHOULDER.z, this.MOUTH_SHOULDER.z, ease);
+
+      this.rightElbow.rotation.x = lerp(this.SAVOR_ELBOW.x, this.MOUTH_ELBOW.x, ease);
+      this.rightElbow.rotation.y = lerp(this.SAVOR_ELBOW.y, this.MOUTH_ELBOW.y, ease);
+      this.rightElbow.rotation.z = lerp(this.SAVOR_ELBOW.z, this.MOUTH_ELBOW.z, ease);
+
+      this.headGroup.rotation.x = lerp(this.SAVOR_HEAD.x, this.MOUTH_HEAD.x, ease);
+
+      if (progress >= 1.0) {
+        this.state = 'repeat_chew';
+        this.phaseTime = 0;
+        this.chewTime = 0;
+
+        this.soundEngine.playAppleCrunchSound();
+        this.triggerJuiceBurst();
+        if (this.onBiteImpact) this.onBiteImpact();
+      }
+    } else if (this.state === 'repeat_chew') {
+      this.phaseTime += delta;
+      this.chewTime += delta;
+
+      this.headGroup.rotation.x = this.MOUTH_HEAD.x + Math.sin(this.chewTime * 14) * 0.05;
+      this.bodyGroup.position.y = Math.sin(this.chewTime * 14) * 0.015;
+
+      if (this.phaseTime >= 0.75) {
+        this.state = 'repeat_lower';
+        this.phaseTime = 0;
+      }
+    } else if (this.state === 'repeat_lower') {
+      this.phaseTime += delta;
+      const progress = Math.min(1.0, this.phaseTime / 0.6);
+      const ease = smoothStep(progress);
+
+      this.rightShoulder.rotation.x = lerp(this.MOUTH_SHOULDER.x, this.SAVOR_SHOULDER.x, ease);
+      this.rightShoulder.rotation.y = lerp(this.MOUTH_SHOULDER.y, this.SAVOR_SHOULDER.y, ease);
+      this.rightShoulder.rotation.z = lerp(this.MOUTH_SHOULDER.z, this.SAVOR_SHOULDER.z, ease);
+
+      this.rightElbow.rotation.x = lerp(this.MOUTH_ELBOW.x, this.SAVOR_ELBOW.x, ease);
+      this.rightElbow.rotation.y = lerp(this.MOUTH_ELBOW.y, this.SAVOR_ELBOW.y, ease);
+      this.rightElbow.rotation.z = lerp(this.MOUTH_ELBOW.z, this.SAVOR_ELBOW.z, ease);
+
+      this.headGroup.rotation.x = lerp(this.MOUTH_HEAD.x, this.SAVOR_HEAD.x, ease);
+
+      if (progress >= 1.0) {
+        this.state = 'idle';
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // JUICE DROPLET PARTICLES
+    // -------------------------------------------------------------------------
     if (this.particlesActive) {
       const positions = this.juiceParticles.geometry.attributes.position.array as Float32Array;
       const mat = this.juiceParticles.material as THREE.PointsMaterial;
