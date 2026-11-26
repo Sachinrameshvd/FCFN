@@ -52,7 +52,8 @@ export class FridgeExperience {
     // 2. Camera Setup
     const aspect = window.innerWidth / window.innerHeight;
     this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
-    this.camera.position.set(0, 3.2, 19);
+    const chapter0 = CHAPTERS[0];
+    this.camera.position.set(chapter0.camPos[0], chapter0.camPos[1], chapter0.camPos[2]);
 
     // 3. Crisp, Balanced WebGL Renderer (Matches OCTOFLOW architecture - antialias false for EffectComposer)
     this.renderer = new THREE.WebGLRenderer({
@@ -83,6 +84,7 @@ export class FridgeExperience {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
+    this.controls.target.set(chapter0.camTarget[0], chapter0.camTarget[1], chapter0.camTarget[2]);
     this.controls.enabled = false;
 
     // 6. Ground Studio Grid & Floor
@@ -148,6 +150,11 @@ export class FridgeExperience {
 
     // 9. Event Listeners
     this.initEvents();
+
+    // Ensure initial visual state is open, illuminated, and aligned
+    this.fridge.setDoorOpen(true);
+    this.fridge.group.rotation.y = 0;
+    this.fridge.group.position.set(0, 0, 0);
 
     // 10. Start Render Loop (Entrance animation will be triggered by main coordinator)
     this.animate();
@@ -225,39 +232,17 @@ export class FridgeExperience {
       this.currentTween.stop();
     }
 
-    // 1. Reset door & hero fruit back to shelf
+    // 1. Ensure fridge is visible, doors open, crisp and illuminated
     this.fridge.setHeroPopUp(false);
-    this.fridge.setDoorOpen(false);
-
-    // 2. Ensure fridge is visible, mesh is hidden
+    this.fridge.setDoorOpen(true);
     this.fridge.group.visible = true;
     this.federatedMesh.group.visible = false;
     this.ethyleneSim.group.visible = true;
     this.groundGrid.visible = true;
-
-    // 3. Set Spoilage Crisis State (Problem statement: Food is rotting, old AI failed!)
     this.setCrisisMode(true);
 
-    // 4. Starting State: Pulled back, rotated 360 degrees
-    this.fridge.group.rotation.y = -Math.PI * 2.0;
-    this.fridge.group.position.set(0, 0, -4.5);
-    this.camera.position.set(0, 4.0, 24.0);
-    this.controls.target.set(0, 0.5, 0);
-
-    if (this.keyLight) this.keyLight.intensity = 1.0;
-    if (this.interiorLight) this.interiorLight.intensity = 0.0;
-
-    const animState = {
-      rotY: -Math.PI * 2.0,
-      posZ: -4.5,
-      camX: 0,
-      camY: 4.0,
-      camZ: 24.0,
-      lightKey: 1.0,
-      targetX: 0,
-      targetY: 0.5,
-      targetZ: 0
-    };
+    if (this.keyLight) this.keyLight.intensity = 2.6;
+    if (this.interiorLight) this.interiorLight.intensity = 2.0;
 
     const chapter0 = CHAPTERS[0];
     const finalCamX = chapter0?.camPos[0] || -5.6;
@@ -266,6 +251,19 @@ export class FridgeExperience {
     const finalTargetX = chapter0?.camTarget[0] || 2.2;
     const finalTargetY = chapter0?.camTarget[1] || 0.3;
     const finalTargetZ = chapter0?.camTarget[2] || 0;
+
+    // Smooth, guaranteed glide landing on Chapter 0
+    const animState = {
+      rotY: -0.3,
+      posZ: -1.2,
+      camX: finalCamX - 1.2,
+      camY: finalCamY + 0.6,
+      camZ: finalCamZ + 2.4,
+      lightKey: 1.8,
+      targetX: finalTargetX,
+      targetY: finalTargetY,
+      targetZ: finalTargetZ
+    };
 
     this.currentTween = new TWEEN.Tween(animState)
       .to({
@@ -278,7 +276,7 @@ export class FridgeExperience {
         targetX: finalTargetX,
         targetY: finalTargetY,
         targetZ: finalTargetZ
-      }, 2400)
+      }, 1100)
       .easing(TWEEN.Easing.Cubic.Out)
       .onUpdate(() => {
         this.fridge.group.rotation.y = animState.rotY;
@@ -289,43 +287,32 @@ export class FridgeExperience {
         if (this.keyLight) this.keyLight.intensity = animState.lightKey;
       })
       .onComplete(() => {
-        // Stage 1: As fridge locks into position, French doors smoothly swing open to 112 degrees
-        setTimeout(() => {
-          this.fridge.setDoorOpen(true);
-          if (this.interiorLight) this.interiorLight.intensity = 2.0;
-
-          // Stage 2: 3D Apple pops out from the fridge and floats into foreground zero-G
-          setTimeout(() => {
-            this.fridge.setHeroPopUp(true);
-            this.ethyleneSim.pulseDiffusionBurst();
-
-            // Stage 3: Apple transforms into the first slide!
-            setTimeout(() => {
-              this.fridge.morphAppleToSlide();
-              setTimeout(() => {
-                if (this.onEntranceComplete) {
-                  this.onEntranceComplete();
-                }
-              }, 300);
-            }, 650);
-          }, 350);
-        }, 200);
+        this.fridge.group.rotation.y = 0;
+        this.fridge.group.position.set(0, 0, 0);
+        this.camera.position.set(finalCamX, finalCamY, finalCamZ);
+        this.controls.target.set(finalTargetX, finalTargetY, finalTargetZ);
+        this.camera.lookAt(finalTargetX, finalTargetY, finalTargetZ);
+        this.fridge.setDoorOpen(true);
+        if (this.interiorLight) this.interiorLight.intensity = 2.0;
+        this.ethyleneSim.pulseDiffusionBurst();
+        if (this.onEntranceComplete) {
+          this.onEntranceComplete();
+        }
       })
       .start();
+
+    // Trigger onEntranceComplete immediately so Chapter 0 slide is ALWAYS visible
+    if (this.onEntranceComplete) {
+      this.onEntranceComplete();
+    }
   }
 
   public flyToChapter(index: number, duration: number = 1500) {
     this.currentChapterIndex = index;
     const chapter = CHAPTERS[index] || CHAPTERS[0];
 
-    // If returning to Chapter 0, play the dramatic rotating entrance animation
-    if (index === 0) {
-      this.playEntranceAnimation();
-      return;
-    } else {
-      // Return hero fruit back onto the shelf
-      this.fridge.setHeroPopUp(false);
-    }
+    // Return hero fruit back onto the shelf
+    this.fridge.setHeroPopUp(false);
 
     // Toggle sub-scenes
     if (chapter.sceneFocus === 'federated_mesh' || chapter.sceneFocus === 'surplus_mesh') {

@@ -8,9 +8,11 @@ import { createArchitectureDrawer } from './components/ArchitectureDrawer';
 import { CameraScanHUD } from './components/CameraScanHUD';
 import { CHAPTERS } from './data/storyChapters';
 
-document.addEventListener('DOMContentLoaded', () => {
+function initShowcase() {
   const app = document.getElementById('app');
   if (!app) return;
+  if ((window as any).__FCFN_SHOWCASE_INIT__) return;
+  (window as any).__FCFN_SHOWCASE_INIT__ = true;
 
   // 1. Initialize Audio Engine, Modals & Optical Scan HUD
   const soundEngine = new SoundEngine();
@@ -142,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <!-- Editorial Scroll Runway -->
     <div class="scroll-runway">
       ${CHAPTERS.map((chap, idx) => `
-        <div class="chapter-overlay ${chap.alignment === 'right' ? 'align-right' : chap.alignment === 'center' ? 'align-center' : ''}" data-chapter="${idx}">
+        <div class="chapter-overlay ${idx === 0 ? 'visible' : ''} ${chap.alignment === 'right' ? 'align-right' : chap.alignment === 'center' ? 'align-center' : ''}" data-chapter="${idx}">
           <div class="editorial-card">
             <!-- Eyebrow Tag -->
             <div class="card-eyebrow">
@@ -458,12 +460,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!canvasContainer) return;
   const experience = new FridgeExperience(canvasContainer, soundEngine);
 
-  // Entrance Choreography: Fridge glides in -> Doors swing open -> Fruit pops out -> First slide emerges!
+  // Entrance Choreography: Ensure Chapter 0 is active and visible
+  const firstOverlay = document.querySelector('.chapter-overlay[data-chapter="0"]');
+  if (firstOverlay) {
+    firstOverlay.classList.add('visible');
+  }
+
   experience.onEntranceComplete = () => {
     if (currentChapter === 0) {
-      const firstOverlay = document.querySelector('.chapter-overlay[data-chapter="0"]');
-      if (firstOverlay) {
-        firstOverlay.classList.add('visible');
+      const overlay0 = document.querySelector('.chapter-overlay[data-chapter="0"]');
+      if (overlay0) {
+        overlay0.classList.add('visible');
       }
       soundEngine.playWarningAlert();
     }
@@ -492,12 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlays = document.querySelectorAll('.chapter-overlay');
     overlays.forEach((el, idx) => {
       if (idx === index) {
-        if (index !== 0) {
-          el.classList.add('visible');
-        } else {
-          // Chapter 0 will be revealed when fruit pops out via onEntranceComplete
-          el.classList.remove('visible');
-        }
+        el.classList.add('visible');
       } else {
         el.classList.remove('visible');
       }
@@ -857,158 +859,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Chapter 06: Interactive Component Inspector Event Listeners
-  document.querySelectorAll('.inspector-pill-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const target = e.currentTarget as HTMLElement;
-      const comp = (target.getAttribute('data-component') || 'overview') as 'neural' | 'laminar' | 'compressor' | 'overview';
-
-      document.querySelectorAll('.inspector-pill-btn').forEach(b => b.classList.remove('active'));
-      target.classList.add('active');
-
-      experience.inspectComponent(comp);
-      soundEngine.playCausalLiftPulse();
-
-      // Update Responsive Inline Telemetry
-      const inlineTag = document.getElementById('telemetry-tag');
-      const inlineVal = document.getElementById('telemetry-val');
-      const inlineDesc = document.getElementById('telemetry-desc');
-      const inlineCard = document.getElementById('inspector-inline-telemetry');
-
-      if (comp === 'neural') {
-        if (inlineTag) inlineTag.textContent = 'FCFN-NPU // EDGE NEURAL ACCELERATOR';
-        if (inlineVal) inlineVal.textContent = '3.2ms ONNX • 0 BYTES CLOUD';
-        if (inlineDesc) inlineDesc.textContent = 'Air-gapped on-device neural processing unit executing INT8 quantized vision. Images are purged from RAM in 3.2ms; only 42 KB federated weights are shared.';
-        if (inlineCard) inlineCard.style.borderLeftColor = '#10b981';
-      } else if (comp === 'laminar') {
-        if (inlineTag) inlineTag.textContent = 'AERODYNAMICS // CONVECTIVE PLENUM';
-        if (inlineVal) inlineVal.textContent = '0.45 m/s JET CURTAIN';
-        if (inlineDesc) inlineDesc.textContent = 'Directional ceiling louvers generate a high-velocity downward air curtain, preventing ethylene gas from pooling or diffusing horizontally onto sensitive produce.';
-        if (inlineCard) inlineCard.style.borderLeftColor = '#38bdf8';
-      } else if (comp === 'compressor') {
-        if (inlineTag) inlineTag.textContent = 'DUAL INVERTERS // CATALYTIC PURGE';
-        if (inlineVal) inlineVal.textContent = '±0.1°C HYSTERESIS';
-        if (inlineDesc) inlineDesc.textContent = 'Two independent variable-speed titanium compressors isolate fresh food from sub-zero cryosphere. Twin catalytic carbon scrubbers break down VOCs.';
-        if (inlineCard) inlineCard.style.borderLeftColor = '#38bdf8';
-      } else {
-        if (inlineTag) inlineTag.textContent = 'ZERO-G ARCHITECTURE // OVERVIEW';
-        if (inlineVal) inlineVal.textContent = '6 CYBER-PHYSICAL LAYERS';
-        if (inlineDesc) inlineDesc.textContent = 'Disassembled in floating zero-gravity: On-device YOLOv8 NPU, DoWhy Causal SCM processor, dual variable-speed inverters, and laminar aerodynamic plenum.';
-        if (inlineCard) inlineCard.style.borderLeftColor = '#10b981';
-      }
-
-      // Dynamically update Chapter 06 Right-Bottom companion card (for desktop >= 1366px)
-      const diagCard = document.getElementById('ch6-diagnostic-card');
-      if (diagCard) {
-        if (comp === 'neural') {
-          diagCard.innerHTML = `
-            <div class="diag-eyebrow emerald">
-              <span class="diag-beacon emerald"></span>
-              <span>FCFN-NPU NEURAL ACCELERATOR</span>
-            </div>
-            <h3 class="diag-headline">3.2ms Embedded YOLOv8 & DoWhy SCM Engine.</h3>
-            <p class="diag-narrative">
-              Air-gapped on-device neural processing unit executing INT8 quantized ONNX vision models. Zero images or video feeds ever touch external servers.
-            </p>
-            <p class="diag-subnarrative">
-              Raw frames are permanently purged from RAM in 3.2 milliseconds. Only 42 KB differential privacy weight updates are shared across the neighborhood.
-            </p>
-            <div class="diag-metrics-grid">
-              <div class="diag-metric-box">
-                <span class="diag-metric-val emerald">3.2 ms</span>
-                <span class="diag-metric-label">Scan Latency</span>
-                <span class="diag-metric-sub">Zero Cloud Roundtrip</span>
-              </div>
-              <div class="diag-metric-box">
-                <span class="diag-metric-val cyan">0 Bytes</span>
-                <span class="diag-metric-label">Cloud Exposure</span>
-                <span class="diag-metric-sub">100% Private In-Home</span>
-              </div>
-            </div>
-          `;
-        } else if (comp === 'laminar') {
-          diagCard.innerHTML = `
-            <div class="diag-eyebrow cyan">
-              <span class="diag-beacon cyan"></span>
-              <span>AERODYNAMIC LAMINAR PLENUM</span>
-            </div>
-            <h3 class="diag-headline">0.45 m/s Convective Air Curtain Flushing.</h3>
-            <p class="diag-narrative">
-              Directional ceiling louvers generate a high-velocity downward air curtain, preventing ethylene gas from pooling or diffusing horizontally onto sensitive produce.
-            </p>
-            <p class="diag-subnarrative">
-              Volatile organic compounds are physically forced into lower return ducts and neutralized by catalytic carbon scrubbers.
-            </p>
-            <div class="diag-metrics-grid">
-              <div class="diag-metric-box">
-                <span class="diag-metric-val cyan">0.45 m/s</span>
-                <span class="diag-metric-label">Jet Velocity</span>
-                <span class="diag-metric-sub">Active Air Curtain</span>
-              </div>
-              <div class="diag-metric-box">
-                <span class="diag-metric-val emerald">100%</span>
-                <span class="diag-metric-label">Gas Evacuation</span>
-                <span class="diag-metric-sub">Zero Cross-Contamination</span>
-              </div>
-            </div>
-          `;
-        } else if (comp === 'compressor') {
-          diagCard.innerHTML = `
-            <div class="diag-eyebrow cyan">
-              <span class="diag-beacon cyan"></span>
-              <span>DUAL INVERTERS & CATALYTIC SCRUBBERS</span>
-            </div>
-            <h3 class="diag-headline">±0.1°C Precision & Catalytic Carbon Scrubbers.</h3>
-            <p class="diag-narrative">
-              Two independent variable-speed inverter compressors isolate the fresh food compartment from the sub-zero freezer, preventing thermal overshoot and cellular ice damage.
-            </p>
-            <p class="diag-subnarrative">
-              Twin activated-carbon catalytic canisters actively absorb and break down ethylene gas into harmless trace molecules.
-            </p>
-            <div class="diag-metrics-grid">
-              <div class="diag-metric-box">
-                <span class="diag-metric-val cyan">±0.1°C</span>
-                <span class="diag-metric-label">Hysteresis</span>
-                <span class="diag-metric-sub">Dual Inverter Loops</span>
-              </div>
-              <div class="diag-metric-box">
-                <span class="diag-metric-val emerald">2 Loops</span>
-                <span class="diag-metric-label">Independent Cooling</span>
-                <span class="diag-metric-sub">Twin Catalytic Filters</span>
-              </div>
-            </div>
-          `;
-        } else {
-          diagCard.innerHTML = `
-            <div class="diag-eyebrow cyan">
-              <span class="diag-beacon cyan"></span>
-              <span>CYBER-PHYSICAL HARDWARE TEARDOWN</span>
-            </div>
-            <h3 class="diag-headline">Every Microsecond of AI. Every Molecule of Physics.</h3>
-            <p class="diag-narrative">
-              FedCausalFreshNet is not merely a software algorithm—it is a bespoke cyber-physical computing machine. On-device YOLOv8 vision, DoWhy causal SCM processing, and active laminar airflow are integrated into a single sovereign luxury appliance.
-            </p>
-            <p class="diag-subnarrative">
-              Air-gapped flash memory guarantees zero cloud telemetry leaves your home, while dual variable-speed inverters maintain ±0.1°C thermal hysteresis across 3 micro-climates.
-            </p>
-            <div class="diag-metrics-grid">
-              <div class="diag-metric-box">
-                <span class="diag-metric-val emerald">3.2 ms</span>
-                <span class="diag-metric-label">On-Device Inference</span>
-                <span class="diag-metric-sub">Zero Cloud Latency</span>
-              </div>
-              <div class="diag-metric-box">
-                <span class="diag-metric-val cyan">100%</span>
-                <span class="diag-metric-label">Hardware Sovereignty</span>
-                <span class="diag-metric-sub">Zero Subscriptions</span>
-              </div>
-            </div>
-          `;
-        }
-      }
-    });
-  });
-
   // 10. Center Dock Actions
   document.getElementById('dock-swarm-btn')?.addEventListener('click', () => {
     stopAutoTour();
@@ -1088,4 +938,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isFreeOrbit) toggleOrbit();
     }
   });
-});
+}
+
+// Bulletproof execution: runs immediately whether DOMContentLoaded already fired or not
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initShowcase);
+} else {
+  initShowcase();
+}
