@@ -115,7 +115,7 @@ export class FridgeExperience {
     this.scene.add(this.fridge.group);
 
     this.federatedMesh = new FederatedMesh();
-    this.federatedMesh.group.position.set(0, 4.5, 0);
+    this.federatedMesh.group.position.set(0, 7.5, 0);
     this.federatedMesh.group.visible = false;
     this.scene.add(this.federatedMesh.group);
 
